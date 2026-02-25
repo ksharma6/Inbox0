@@ -1,4 +1,4 @@
-## Inbox Zero — AI Email Assistant
+## Inbox0 — AI Email Assistant
 
 An AI assistant that reads your Gmail, summarizes your day’s to‑dos, and drafts responses for human review in Slack. Runs a Flask server with Slack actions and a LangGraph workflow that orchestrates Gmail + OpenAI. At this time, the project only supports calls to OpenAI's API. 
 
