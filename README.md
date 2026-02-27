@@ -2,9 +2,54 @@
 
 An AI assistant that reads your Gmail, summarizes your day’s to‑dos, and drafts responses for human review in Slack. Runs a Flask server with Slack actions and a LangGraph workflow that orchestrates Gmail + OpenAI. At this time, the project only supports calls to OpenAI's API. 
 
+## Features
+
+### Intelligent Email Triage
+
+- **Smart Summarization**: Automatically reads your recent unread emails and generates a high-level daily summary, highlighting key themes and urgent items.
+
+<p align="center">
+  <img src="assets/Email Summary.png" alt="Description of image" width="600">
+</p>
+
+- **Actionable Insights**: Analyzes each email to determine if a response is required, filtering out spam and promotional content while flagging important messages from clients or colleagues.
+
+### AI-Powered Drafting
+
+- **Context-Aware Responses**: Uses OpenAI (more LLM support to come) to draft professional replies based on the original email's context, tone, and priority.
+
+- **Customizable Persona**: configurable salutations and sign-offs to match your personal style.
+
+- **Smart Routing**: Determines whether a `Reply`, `Forward`, or `New Email` is the appropriate action.
+
+### Slack-Based Workflow (Human-in-the-Loop)
+
+- **Interactive Approvals**: Sends generated drafts directly to Slack as interactive messages.
+
+- **One-Click Actions**:
+
+  - ✅ **Approve & Send**: Immediately sends the email via Gmail.
+
+  - ❌ **Reject**: Discards the draft.
+
+  - 💾 **Save Draft**: Saves it to your Gmail Drafts folder for later editing.
+
+<p align="center">
+  <img src="assets/Slack HITL Preview.png" alt="Description of image" width="600">
+</p>
+
+- **State Management**: The workflow pauses for your input and seamlessly resumes after you take action.
+
+### Seamless Orchestration
+
+- **LangGraph Architecture**: Built on a robust state machine that manages the flow between Gmail reading, AI processing, and Slack user interaction.
+
+- **Secure Integration**: Runs locally with your own API keys, keeping your data private and secure.
+
 ### Quick start
 
-1) Prerequisites
+1. Prerequisites
+
 - Python 3.11+
 - Google OAuth setup (Gmail)
   - In Google Cloud Console: enable Gmail API
@@ -14,7 +59,8 @@ An AI assistant that reads your Gmail, summarizes your day’s to‑dos, and dra
 - A Slack App (Bot) installed to your workspace
 - An OpenAI API key
 
-2) Clone and install
+1. Clone and install
+
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
@@ -22,8 +68,10 @@ pip install -r requirements.txt
 pip install flask slack_bolt slack_sdk python-dotenv langgraph bs4 openai pydantic
 ```
 
-3) Configure environment
+1. Configure environment
+
 - Create a `.env` file in the project root with the following keys:
+
 ```
 OPENAI_API_KEY=your-openai-key
 SLACK_BOT_TOKEN=xoxb-...
@@ -32,7 +80,8 @@ SLACK_SIGNING_SECRET=...
 TOKENS_PATH=/absolute/path/to/inbox_zero/tokens/
 ```
 
-4) Slack App setup
+1. Slack App setup
+
 - Create a Slack App (from scratch) and add a Bot user
 - OAuth scopes (typical):
   - chat:write
@@ -43,38 +92,35 @@ TOKENS_PATH=/absolute/path/to/inbox_zero/tokens/
 - Install the app to your workspace and copy the Bot Token and Signing Secret into `.env`
 - For local development, use a tunneling tool (e.g., ngrok) to expose `http://localhost:5002`
 
-5) Run the server
+1. Run the server
+
 ```bash
 python main.py
 # Server listens on http://localhost:5002
 ```
 
-### What it does
-- Reads recent Gmail messages via the Gmail API
-- Generates a concise summary and identifies emails needing responses (OpenAI)
-- Creates draft replies (OpenAI + Gmail)
-- Sends each draft to Slack for approve/reject/save via interactive buttons
-- Resumes the workflow after each Slack action until done, then posts a final summary
-
 ### API endpoints
+
 - POST `/start_workflow`
   - Body: `{ "user_id": "U123ABC" }` (Slack user ID to DM approval requests)
   - Starts the LangGraph workflow. Returns `{"status": "paused", "awaiting_approval": true}` when waiting on Slack approval, or `{"status": "completed", ...}` when it finishes in one pass.
-
 - POST `/resume_workflow`
   - Body: `{ "user_id": "U123ABC", "action": "approve_draft"|"reject_draft"|"save_draft" }`
   - Resumes the workflow after a Slack action when needed.
 
 Slack endpoints used by the app
+
 - `/slack/events` — Slack Events API entrypoint
 - `/slack/actions` — Interactivity actions (buttons) entrypoint
 
 ### Configuration notes
+
 - `.env` is loaded at runtime. Ensure it exists at the project root before starting the app.
 - `TOKENS_PATH` must be an absolute path and end with a trailing slash. It should contain `credentials.json` and will be where `token.json` is created.
 - The Flask server defaults to port `5002`.
 
 ### Project structure (high level)
+
 ```
 inbox_zero/
   main.py                    # Flask + Slack app bootstrap
@@ -111,18 +157,21 @@ inbox_zero/
 ```
 
 ### How it works (architecture)
+
 1. Client calls `/start_workflow` with a Slack `user_id`
 2. `EmailProcessingWorkflow`:
-   - reads unread emails
-   - summarizes and analyzes which need responses (OpenAI)
-   - generates drafts (OpenAI) and builds Gmail drafts
-   - sends each draft to Slack via `DraftApprovalHandler` with Approve/Reject/Save buttons
-   - pauses while waiting for user action (state is saved)
+  - reads unread emails
+  - summarizes and analyzes which need responses (OpenAI)
+  - generates drafts (OpenAI) and builds Gmail drafts
+  - sends each draft to Slack via `DraftApprovalHandler` with Approve/Reject/Save buttons
+  - pauses while waiting for user action (state is saved)
 3. When the user clicks a Slack button, the app resumes via `/slack/actions` → internal resume logic → `/resume_workflow`
 4. After all drafts are handled, a final summary is posted and the workflow completes
 
 ### Example requests
+
 Start workflow
+
 ```bash
 curl -X POST http://localhost:5002/start_workflow \
   -H 'Content-Type: application/json' \
@@ -130,6 +179,7 @@ curl -X POST http://localhost:5002/start_workflow \
 ```
 
 Resume after an approval (usually triggered internally from Slack)
+
 ```bash
 curl -X POST http://localhost:5002/resume_workflow \
   -H 'Content-Type: application/json' \
@@ -137,6 +187,7 @@ curl -X POST http://localhost:5002/resume_workflow \
 ```
 
 ### Troubleshooting
+
 - Slack 401/invalid signature: verify `SLACK_SIGNING_SECRET` and external URLs for `/slack/actions` and `/slack/events`
 - Cannot DM the user: ensure the bot is installed and has `im:write`; use a valid Slack user ID (e.g., starts with `U`)
 - Gmail errors: confirm `credentials.json` exists at `TOKENS_PATH` and re‑run to regenerate `token.json` if needed
@@ -144,5 +195,7 @@ curl -X POST http://localhost:5002/resume_workflow \
 - `TOKENS_PATH` must end with `/` so the app finds `token.json` and `credentials.json`
 
 ### Security
+
 - Do not commit `credentials.json` or `token.json`
 - Keep API keys in `.env` or your secret manager
+
