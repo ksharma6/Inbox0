@@ -1,5 +1,6 @@
 import datetime
 import json
+import os
 import uuid
 from typing import Dict, List
 
@@ -473,13 +474,18 @@ class EmailProcessingWorkflow:
         Returns:
             draft response content
         """
+        salutation = os.getenv("EMAIL_SALUTATION")
+        signature = os.getenv("EMAIL_SIGNOFF")
+
+        truncated_body = email.body[:8000] if email.body else ""
+
         prompt = f"""
         You are a professional email assistant. Generate a draft response for this email.
         
         Original Email:
         From: {email.from_email}
         Subject: {email.subject}
-        Body: {email.body}
+        Body: {truncated_body}
         
         Response Requirements:
         - Priority: {email_info['priority']}
@@ -487,11 +493,16 @@ class EmailProcessingWorkflow:
         - Reason: {email_info['reason']}
         
         Guidelines:
-        1. Be professional and courteous
-        2. Address the key points from the original email
-        3. Keep it concise but complete
-        4. Match the tone of the original email
-        5. Include a clear call to action if needed
+        1. Identify the sender's first name from the "From" field: "{email.from_email}"
+        2. Use the salutation pattern: "{salutation}"
+           - Replace "{{name}}" with the sender's actual name (e.g. "Hello John,").
+           - If the name cannot be found, fallback to a generic friendly greeting like "Hello,".
+        3. Be professional and courteous
+        4. Address the key points from the original email
+        5. Keep it succinct but complete. Avoid using too many words and flowery language.
+        6. Match the tone of the original email
+        7. Include a clear call to action if needed
+        8. End the email with the signature: "{signature}"
         
         Generate the draft response:
         """
