@@ -1,4 +1,5 @@
 # Local files and API keys
+.cursor/
 .DS_Store
 .env
 .inbox_zero.egg-info/
