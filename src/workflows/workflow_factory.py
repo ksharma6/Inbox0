@@ -1,6 +1,6 @@
 import os
 
-from openai import OpenAI
+from openrouter import OpenRouter
 from slack_bolt import App
 from src.gmail import GmailReader, GmailWriter
 from src.slack_handlers.draft_approval_handler import get_draft_handler
@@ -23,10 +23,14 @@ def get_workflow(slack_app: App):
 
     draft_handler = get_draft_handler(slack_app)
 
-    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    openrouter_client = OpenRouter(
+        api_key=os.getenv("OPENROUTER_API_KEY"),
+        base_url=os.getenv("OPENROUTER_BASE_URL"),
+        app_name=os.getenv("APP_NAME"),
+    )
     return EmailProcessingWorkflow(
         gmail_reader=gmail_reader,
         gmail_writer=gmail_writer,
         draft_handler=draft_handler,
-        openai_client=openai_client,
+        openrouter_client=openrouter_client,
     )

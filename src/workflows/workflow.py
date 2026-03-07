@@ -4,9 +4,9 @@ import uuid
 from typing import Dict, List
 
 from langgraph.graph import END, StateGraph
-from openai import OpenAI
+from openrouter import OpenRouter
 from src.gmail import GmailReader, GmailWriter
-from src.models.agent import GmailAgentState
+from src.models.agent_schemas import GmailAgentState
 from src.models.gmail import EmailSummary
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
 
@@ -22,14 +22,14 @@ class EmailProcessingWorkflow:
         gmail_reader: GmailReader object
         gmail_writer: GmailWriter object
         draft_handler: DraftApprovalHandler object
-        openai_client: OpenAI object
+        openrouter_client: OpenRouter object
 
     Example:
         workflow = EmailProcessingWorkflow(
             gmail_reader=GmailReader(),
             gmail_writer=GmailWriter(),
             draft_handler=DraftApprovalHandler(),
-            openai_client=OpenAI(),
+            openrouter_client=OpenRouter(),
         )
         workflow.run()
     """
@@ -39,12 +39,12 @@ class EmailProcessingWorkflow:
         gmail_reader: GmailReader,
         gmail_writer: GmailWriter,
         draft_handler: DraftApprovalHandler,
-        openai_client: OpenAI,
+        openrouter_client: OpenRouter,
     ):
         self.gmail_reader = gmail_reader
         self.gmail_writer = gmail_writer
         self.draft_handler = draft_handler
-        self.openai_client = openai_client
+        self.openrouter_client = openrouter_client
 
         self.workflow = self._create_workflow()
 
@@ -128,7 +128,7 @@ class EmailProcessingWorkflow:
         return state
 
     def _generate_email_summary(self, state: GmailAgentState) -> GmailAgentState:
-        """Generate a high-level summary of unread emails using OpenAI
+        """Generate a high-level summary of unread emails using OpenRouter
 
         Args:
             state: GmailAgentState object
@@ -143,7 +143,7 @@ class EmailProcessingWorkflow:
 
             print("Generating email summary...")
 
-            # Create summary using OpenAI and summarizing only 3 emails
+            # Create summary using OpenRouter and summarizing only 3 emails
             emails_text = self._format_emails_for_summary(state.unread_emails[:3])
 
             prompt = f"""
@@ -160,7 +160,7 @@ class EmailProcessingWorkflow:
             Provide a concise, professional summary:
             """
 
-            response = self.openai_client.chat.completions.create(
+            response = self.openrouter_client.chat.completions.create(
                 model="gpt-4",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=500,
@@ -185,7 +185,7 @@ class EmailProcessingWorkflow:
         return state
 
     def _process_emails_for_drafts(self, state: GmailAgentState) -> GmailAgentState:
-        """Analyze emails and determine which need draft responses using OpenAI
+        """Analyze emails and determine which need draft responses using OpenRouter
 
         Args:
             state: GmailAgentState object
@@ -231,8 +231,8 @@ class EmailProcessingWorkflow:
             }}
             """
 
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4",
+            response = self.openrouter_client.chat.completions.create(
+                model="openrouter/gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=1000,
             )
@@ -254,7 +254,7 @@ class EmailProcessingWorkflow:
         return state
 
     def _create_draft_responses(self, state: GmailAgentState) -> GmailAgentState:
-        """Create draft responses for emails that have been determined to need them using OpenAI
+        """Create draft responses for emails that have been determined to need them using OpenRouter
 
         Args:
             state: GmailAgentState object
@@ -278,7 +278,7 @@ class EmailProcessingWorkflow:
                 if not email:
                     continue
 
-                # Generate draft response using OpenAI
+                # Generate draft response using OpenRouter
                 draft_content = self._generate_draft_response(email, email_info)
 
                 # Create draft using GmailWriter
@@ -464,7 +464,7 @@ class EmailProcessingWorkflow:
         return groups
 
     def _generate_draft_response(self, email, email_info: Dict) -> str:
-        """Generate draft response content using OpenAI
+        """Generate draft response content using OpenRouter
 
         Args:
             email: Email object
@@ -496,8 +496,8 @@ class EmailProcessingWorkflow:
         Generate the draft response:
         """
 
-        response = self.openai_client.chat.completions.create(
-            model="gpt-4",
+        response = self.openrouter_client.chat.completions.create(
+            model="openrouter/gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=500,
         )
