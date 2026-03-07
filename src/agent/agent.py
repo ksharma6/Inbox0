@@ -1,24 +1,29 @@
 import json
 from typing import Callable, Dict
 
-from openai import OpenAI
+from openrouter import OpenRouter
 from src.gmail.gmail_reader import GmailReader
 from src.gmail.gmail_writer import GmailWriter
-from src.models.agent import AgentSchema, ProcessRequestSchema
+from src.models.agent_schemas import AgentSchema, ProcessRequestSchema
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
+from src.utils.usage_tracker import UsageTracker
 
 
 class Agent:
     def __init__(self, schema: AgentSchema):
-        """Initializes the Agent
+        """Initializes OpenRouter agent using OpenRouter SDK and schema configuration defined by agent_schemas.py
 
         Args:
-            schema (AgentSchema): Configuration schema containing API key, model, and available tools
+            schema (AgentSchema): Configuration schema containing API key, model, site_url, app_name, and available tools
         """
-        self.client = OpenAI(api_key=schema.api_key)
+        self.client = OpenRouter(
+            api_key=schema.api_key, base_url=schema.base_url, app_name=schema.app_name
+        )
         self.model = schema.model
         self.available_tools = schema.available_tools
         self.function_map: Dict[str, Callable] = {}
+        self.site_url = schema.site_url
+        self.usage_tracker = UsageTracker()
 
         # Map available tools to their methods
         self._setup_function_map()
@@ -189,4 +194,15 @@ class Agent:
             .message.content
         )
         print(f"\nAgent final response:\n{final_response}")
+
+        # extract + log usage data
+        usage_data = response.usage
+
+        self.usage_tracker.log_usage(
+            model=self.model,
+            site_url=self.site_url,
+            prompt_tokens=usage_data.prompt_tokens,
+            completion_tokens=usage_data.completion_tokens,
+            total_tokens=usage_data.total_tokens,
+        )
         return final_response

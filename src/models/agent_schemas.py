@@ -1,16 +1,48 @@
 import datetime
+import os
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
-
 from src.models.gmail import EmailMessage, EmailSummary
+
+
+def get_default_model():
+    """Get the default model from environment or fallback to industry standard."""
+    return os.getenv("OPENROUTER_MODEL", os.getenv("LLM_MODEL", "openai/gpt-4o-mini"))
+
+
+def get_default_api_key():
+    """Get the default API key from environment."""
+    return os.getenv("OPENROUTER_API_KEY", os.getenv("OPENAI_API_KEY"))
+
+
+def get_default_base_url():
+    """Get the default base URL from environment or fallback to OpenRouter."""
+    return os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 
 
 class AgentSchema(BaseModel):
     """Schema for agent configuration"""
 
-    api_key: str = Field(..., description="OpenAI API key")
-    model: str = Field(default="gpt-4", description="OpenAI model to use")
+    api_key: str = Field(
+        default_factory=get_default_api_key,
+        description="API key (OpenRouter or OpenAI)",
+    )
+    model: str = Field(
+        default_factory=get_default_model,
+        description="Model to use (e.g. openai/gpt-4o-mini)",
+    )
+    base_url: str = Field(
+        default_factory=get_default_base_url, description="API Base URL"
+    )
+    site_url: Optional[str] = Field(
+        default=os.getenv("SITE_URL", "http://localhost:3000"),
+        description="Site URL for OpenRouter rankings",
+    )
+    app_name: Optional[str] = Field(
+        default=os.getenv("APP_NAME", "InboxZero"),
+        description="App name for OpenRouter rankings",
+    )
     available_tools: Dict[str, Any] = Field(
         default={}, description="Available tools for the agent"
     )
