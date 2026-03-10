@@ -14,6 +14,8 @@ from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
 
 from .state_manager import save_state_to_store
 
+logger = logging.getLogger(__name__)
+
 
 class EmailProcessingWorkflow:
     """LangGraph workflow for processing/summarizing emails and generating draft responses to send to user via Slack.
@@ -143,7 +145,7 @@ class EmailProcessingWorkflow:
                 state.email_summary = None
                 return state
 
-            print("Generating email summary...")
+            logger.info("Generating email summary via Agent...")
 
             # Create summary using OpenRouter and summarizing only 3 emails
             emails_text = self._format_emails_for_summary(state.unread_emails[:3])
@@ -178,7 +180,7 @@ class EmailProcessingWorkflow:
                 recent_activity=summary_text or "No summary available",
             )
 
-            print("Email summary generated successfully")
+            logger.info("Email summary generated successfully via Agent")
 
         except Exception as e:
             state.error_message = f"Error generating summary: {str(e)}"
@@ -199,7 +201,7 @@ class EmailProcessingWorkflow:
             if not state.unread_emails:
                 return state
 
-            print("Processing emails for draft responses...")
+            logger.info("Processing emails for draft responses via Agent...")
 
             emails_text = self._format_emails_for_analysis(state.unread_emails)
 
@@ -245,14 +247,20 @@ class EmailProcessingWorkflow:
                 try:
                     analysis = json.loads(content)
                 except json.JSONDecodeError:
-                    print(f"Failed to parse JSON: {content}")
+                    logger.error(f"Failed to parse JSON: {content}")
                     analysis = {"emails_to_respond": []}
             else:
                 analysis = {"emails_to_respond": []}
 
             state.processed_emails = analysis.get("emails_to_respond", [])
 
-            print(f"Identified {len(state.processed_emails)} emails needing responses")
+            logger.info(
+                f"Identified {len(state.processed_emails)} emails needing responses via Agent"
+            )
+            for email in state.processed_emails:
+                logger.info(
+                    f"Draft needed for email ID: {email['email_id']}: Reason: {email['reason']}"
+                )
 
         except Exception as e:
             state.error_message = f"Error processing emails: {str(e)}"
@@ -273,7 +281,7 @@ class EmailProcessingWorkflow:
             if not state.processed_emails:
                 return state
 
-            print("Creating draft responses...")
+            logger.info("Creating draft responses via Agent...")
 
             draft_responses = []
 
@@ -308,11 +316,11 @@ class EmailProcessingWorkflow:
                     )
 
                 except Exception as e:
-                    print(f"Error creating draft for email {email_id}: {e}")
+                    logger.error(f"Error creating draft for email {email_id}: {e}")
                     continue
 
             state.draft_responses = draft_responses
-            print(f"Created {len(draft_responses)} draft responses")
+            logger.info(f"Created {len(draft_responses)} draft responses via Agent")
 
         except Exception as e:
             state.error_message = f"Error creating drafts: {str(e)}"
@@ -380,7 +388,7 @@ class EmailProcessingWorkflow:
             GmailAgentState object
         """
         try:
-            print("Sending final summary...")
+            logger.info("Sending final summary via Agent...")
 
             summary_parts = []
 
@@ -409,9 +417,10 @@ class EmailProcessingWorkflow:
             try:
                 target = state.user_id
                 print(f"Final summary:\n{final_summary}")
+                logger.info(f"Final summary:\n{final_summary}")
 
             except Exception as e:
-                print(f"Error sending final summary: {e}")
+                logger.error(f"Error sending final summary: {e}")
 
             state.final_summary = final_summary
             state.workflow_complete = True
