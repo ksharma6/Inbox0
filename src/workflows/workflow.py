@@ -1,12 +1,14 @@
 import datetime
 import json
+import logging
+import os
 import uuid
 from typing import Dict, List
 
 from langgraph.graph import END, StateGraph
-from openrouter import OpenRouter
+from src.agent.agent import Agent
 from src.gmail import GmailReader, GmailWriter
-from src.models.agent_schemas import GmailAgentState
+from src.models.agent_schemas import GmailAgentState, ProcessRequestSchema
 from src.models.gmail import EmailSummary
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
 
@@ -39,12 +41,12 @@ class EmailProcessingWorkflow:
         gmail_reader: GmailReader,
         gmail_writer: GmailWriter,
         draft_handler: DraftApprovalHandler,
-        openrouter_client: OpenRouter,
+        agent: Agent,
     ):
         self.gmail_reader = gmail_reader
         self.gmail_writer = gmail_writer
         self.draft_handler = draft_handler
-        self.openrouter_client = openrouter_client
+        self.agent = agent
 
         self.workflow = self._create_workflow()
 
@@ -116,15 +118,15 @@ class EmailProcessingWorkflow:
         unread_emails = self.gmail_reader.read_emails(
             count=5, unread_only=True, include_body=True, primary_only=True
         )
-        # for each email thread, get only the 4 most recent emails
+        # for each email thread, get only the 2 most recent emails
         recent_emails = []
         for email in unread_emails:
             thread_emails = self.gmail_reader.get_recent_emails_in_thread(
-                email.thread_id, count=4
+                email.thread_id, count=2
             )
             recent_emails.extend(thread_emails)
 
-        state.unread_emails = list({e.id: e for e in recent_emails}.values())
+        state.unread_emails = list({e.id: e for e in recent_emails}.values())[:5][:5]
         return state
 
     def _generate_email_summary(self, state: GmailAgentState) -> GmailAgentState:
@@ -160,13 +162,13 @@ class EmailProcessingWorkflow:
             Provide a concise, professional summary:
             """
 
-            response = self.openrouter_client.chat.completions.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=500,
+            request_schema = ProcessRequestSchema(
+                user_prompt=prompt,
+                llm_tool_schema=None,
+                system_message="You are an email assistant that speaks succinctly and professionally.",
+                user_id=state.user_id,
             )
-
-            summary_text = response.choices[0].message.content
+            summary_text = self.agent.process_request(request_schema)
 
             state.email_summary = EmailSummary(
                 total_unread=len(state.unread_emails),
@@ -202,18 +204,12 @@ class EmailProcessingWorkflow:
             emails_text = self._format_emails_for_analysis(state.unread_emails)
 
             prompt = f"""
-            Analyze these emails and determine which ones need draft responses.
+            Analyze these emails and determine which ones require a draft response from the user.
             Consider:
-            1. Is this a personal email that requires a response?
-            2. Is this from someone important (boss, client, colleague)?
-            3. Does the email ask a question or require action?
-            4. Is this spam or promotional content (don't respond)?
-            
-            For each email that needs a response, provide:
-            - Email ID: {state.unread_emails[0].id}
-            - Priority: High/Medium/Low
-            - Response type: Reply/Forward/New email
-            - Brief reason why response is needed
+            1. If the email is a part of a thread, weigh the most recent emails more heavily.
+            2. If the email asks a question or mentions an action to the user, it should be responded to.
+            3. Confirmation of receipt of an email is not required.
+            4. confirmation emails (such as payment confirmations, out of office notifications, etc.) are not required to be responded to.
             
             Emails:
             {emails_text}
@@ -231,15 +227,26 @@ class EmailProcessingWorkflow:
             }}
             """
 
-            response = self.openrouter_client.chat.completions.create(
-                model="openrouter/gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=1000,
+            request_schema = ProcessRequestSchema(
+                user_prompt=prompt,
+                llm_tool_schema=None,
+                system_message="You are an email assistant that analyzes emails to determine which ones require a response..",
+                user_id=state.user_id,
             )
+            content = self.agent.process_request(request_schema)
 
-            content = response.choices[0].message.content
+            # process content to verify it is valid JSON
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+
             if content:
-                analysis = json.loads(content)
+                try:
+                    analysis = json.loads(content)
+                except json.JSONDecodeError:
+                    print(f"Failed to parse JSON: {content}")
+                    analysis = {"emails_to_respond": []}
             else:
                 analysis = {"emails_to_respond": []}
 
@@ -473,6 +480,9 @@ class EmailProcessingWorkflow:
         Returns:
             draft response content
         """
+        salutation = os.getenv("EMAIL_SALUTATION", "Hi")
+        signoff = os.getenv("EMAIL_SIGNOFF", "Best,\n[Your Name]")
+
         prompt = f"""
         You are a professional email assistant. Generate a draft response for this email.
         
@@ -487,22 +497,22 @@ class EmailProcessingWorkflow:
         - Reason: {email_info['reason']}
         
         Guidelines:
-        1. Be professional and courteous
-        2. Address the key points from the original email
-        3. Keep it concise but complete
-        4. Match the tone of the original email
-        5. Include a clear call to action if needed
+        1. Be professional, courteous, and concise.
+        2. Address the key points from the original email that warrants a response.
+        3. Include a clear call to action if needed.
+        4. Use the following salutation: "{salutation}" (or appropriate variation)
+        5. Use the following signoff: "{signoff}"
         
         Generate the draft response:
         """
 
-        response = self.openrouter_client.chat.completions.create(
-            model="openrouter/gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=500,
+        request_schema = ProcessRequestSchema(
+            user_prompt=prompt,
+            llm_tool_schema=None,
+            system_message="You are a professional email assistant that generates draft responses for emails.",
+            user_id=email.user_id,
         )
-
-        content = response.choices[0].message.content
+        content = self.agent.process_request(request_schema)
         return content or "No response generated"
 
     def run(self, user_id: str) -> GmailAgentState:

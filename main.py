@@ -5,7 +5,6 @@ from logging.handlers import TimedRotatingFileHandler
 
 from flask import Flask
 from slack_bolt import App as SlackApp
-
 from src.routes.integrations_slack.slack_routes import register_slack_routes
 from src.routes.web.flask_routes import register_flask_routes
 from src.utils.load_env import load_dotenv_helper
