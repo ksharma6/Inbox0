@@ -1,7 +1,6 @@
 from typing import List
 
 from pydantic import BaseModel, Field
-
 from src.models.toolfunction import ParamProperties, ToolFunction, ToolParams
 
 

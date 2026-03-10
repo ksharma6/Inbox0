@@ -3,7 +3,6 @@ from typing import Dict, List, Optional
 
 from bs4 import BeautifulSoup
 from googleapiclient.discovery import build
-
 from src.models.gmail import EmailMessage
 
 from .gmail_authenticator import auth_user

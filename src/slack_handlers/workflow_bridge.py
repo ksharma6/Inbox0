@@ -1,4 +1,4 @@
-from src.models.agent import GmailAgentState
+from src.models.agent_schemas import GmailAgentState
 from src.workflows.state_manager import (
     extract_langgraph_state,
     load_state_from_store,
