@@ -498,7 +498,7 @@ class EmailProcessingWorkflow:
         Original Email:
         From: {email.from_email}
         Subject: {email.subject}
-        Body: {email.body}
+        Body: {truncated_body}
         
         Response Requirements:
         - Priority: {email_info['priority']}
