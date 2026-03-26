@@ -39,9 +39,10 @@ def register_slack_routes(app, slack_app: SlackApp, workflow):
 
         if "application/json" in content_type and request.json:
             logging.info("slack_events payload=%s", request.json)
+            logging.info("Processing JSON request")
             if request.json.get("type") == "url_verification":
                 challenge = request.json.get("challenge", "")
-                return challenge
+                return challenge, 200
 
         if "application/x-www-form-urlencoded" in content_type and request.form:
             logging.info("Processing form data: %s", dict(request.form))
