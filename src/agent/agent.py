@@ -4,22 +4,31 @@ from typing import Callable, Dict
 from openai import OpenAI
 from src.gmail.gmail_reader import GmailReader
 from src.gmail.gmail_writer import GmailWriter
-from src.models.agent import AgentSchema, ProcessRequestSchema
+from src.models.agent_schemas import AgentSchema, ProcessRequestSchema
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
+from src.utils.usage_tracker import UsageTracker
 
 
 class Agent:
     def __init__(self, schema: AgentSchema):
-        """Initializes the Agent
+        """Initializes OpenRouter agent using OpenRouter SDK and schema configuration defined by agent_schemas.py
 
         Args:
-            schema (AgentSchema): Configuration schema containing API key, model, and available tools
+            schema (AgentSchema): Configuration schema containing API key, model, site_url, app_name, and available tools
         """
-        self.client = OpenAI(api_key=schema.api_key)
-        self.model = schema.model
+        self.schema = schema
         self.available_tools = schema.available_tools
         self.function_map: Dict[str, Callable] = {}
-
+        self.site_url = schema.site_url
+        self.usage_tracker = UsageTracker()
+        self.client = OpenAI(
+            api_key=schema.api_key,
+            base_url=schema.base_url,
+            default_headers={
+                "HTTP-Referer": schema.site_url,
+                "X-Title": schema.app_name,
+            },
+        )
         # Map available tools to their methods
         self._setup_function_map()
 
@@ -68,31 +77,33 @@ class Agent:
 
         # Convert tool schema(s) to proper OpenAI format
         # Handle both single ToolFunction and list of ToolFunctions
-        if isinstance(self.llm_tool_schema, list):
-            tools_payload = [
-                {
-                    "type": "function",
-                    "function": tool_schema.model_dump(),
-                }
-                for tool_schema in self.llm_tool_schema
-            ]
-        else:
-            tools_payload = [
-                {
-                    "type": "function",
-                    "function": self.llm_tool_schema.model_dump(),
-                }
-            ]
+        tools_payload = None  # Default to None
+        if schema.llm_tool_schema:  # Only process if not None
+            if isinstance(schema.llm_tool_schema, list):
+                tools_payload = [
+                    {
+                        "type": "function",
+                        "function": tool_schema.model_dump(),
+                    }
+                    for tool_schema in schema.llm_tool_schema
+                ]
+            else:
+                tools_payload = [
+                    {
+                        "type": "function",
+                        "function": schema.llm_tool_schema.model_dump(),
+                    }
+                ]
 
         iteration = 0
         while iteration < max_iterations:
             print(f"\n--- Iteration {iteration + 1}/{max_iterations} ---")
 
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=self.schema.model,
                 messages=messages,
-                tools=tools_payload,  # type: ignore
-                tool_choice="auto",
+                tools=tools_payload,
+                tool_choice="auto" if tools_payload else None,
             )
             response_message = response.choices[0].message
             tool_calls = response_message.tool_calls
@@ -184,9 +195,22 @@ class Agent:
             f"\nReached maximum iterations ({max_iterations}). Getting final response..."
         )
         final_response = (
-            self.client.chat.completions.create(model=self.model, messages=messages)
+            self.client.chat.completions.create(
+                model=self.schema.model, messages=messages
+            )
             .choices[0]
             .message.content
         )
         print(f"\nAgent final response:\n{final_response}")
+
+        # extract + log usage data
+        usage_data = response.usage
+
+        self.usage_tracker.log_usage(
+            model=self.schema.model,
+            site_url=self.site_url,
+            prompt_tokens=usage_data.prompt_tokens,
+            completion_tokens=usage_data.completion_tokens,
+            # total_tokens=usage_data.total_tokens,
+        )
         return final_response

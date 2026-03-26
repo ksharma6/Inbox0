@@ -2,7 +2,7 @@ import pickle
 from datetime import datetime
 from typing import Dict, Optional
 
-from src.models.agent import GmailAgentState
+from src.models.agent_schemas import GmailAgentState
 
 
 class StateManager:

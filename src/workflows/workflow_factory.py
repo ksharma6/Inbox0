@@ -1,8 +1,9 @@
 import os
 
-from openai import OpenAI
 from slack_bolt import App
+from src.agent.agent import Agent
 from src.gmail import GmailReader, GmailWriter
+from src.models.agent_schemas import AgentSchema, get_default_api_key, get_default_base_url
 from src.slack_handlers.draft_approval_handler import get_draft_handler
 from src.workflows.workflow import EmailProcessingWorkflow
 
@@ -23,10 +24,16 @@ def get_workflow(slack_app: App):
 
     draft_handler = get_draft_handler(slack_app)
 
-    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    agent_schema = AgentSchema(
+        api_key=get_default_api_key(),
+        base_url=get_default_base_url(),
+        app_name=os.getenv("APP_NAME"),
+    )
+    agent = Agent(schema=agent_schema)
+
     return EmailProcessingWorkflow(
         gmail_reader=gmail_reader,
         gmail_writer=gmail_writer,
         draft_handler=draft_handler,
-        openai_client=openai_client,
+        agent=agent,
     )

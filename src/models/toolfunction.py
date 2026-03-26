@@ -35,7 +35,7 @@ class ToolFunction(BaseModel):
 class LLMToolSchema(BaseModel):
     # complete schema for tool in format expected by llm
     type: Literal["function"] = (
-        "function"  # For OpenAI's current tool calling, this is "function"
+        "function"  # For OpenRouter's current tool calling, this is "function"
     )
     function: ToolFunction = Field(
         ..., description="The definition of the function tool."

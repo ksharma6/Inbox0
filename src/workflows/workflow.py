@@ -1,17 +1,20 @@
 import datetime
 import json
+import logging
 import os
 import uuid
 from typing import Dict, List
 
 from langgraph.graph import END, StateGraph
-from openai import OpenAI
+from src.agent.agent import Agent
 from src.gmail import GmailReader, GmailWriter
-from src.models.agent import GmailAgentState
+from src.models.agent_schemas import GmailAgentState, ProcessRequestSchema
 from src.models.gmail import EmailSummary
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
 
 from .state_manager import save_state_to_store
+
+logger = logging.getLogger(__name__)
 
 
 class EmailProcessingWorkflow:
@@ -23,14 +26,14 @@ class EmailProcessingWorkflow:
         gmail_reader: GmailReader object
         gmail_writer: GmailWriter object
         draft_handler: DraftApprovalHandler object
-        openai_client: OpenAI object
+        openrouter_client: OpenRouter object
 
     Example:
         workflow = EmailProcessingWorkflow(
             gmail_reader=GmailReader(),
             gmail_writer=GmailWriter(),
             draft_handler=DraftApprovalHandler(),
-            openai_client=OpenAI(),
+            openrouter_client=OpenRouter(),
         )
         workflow.run()
     """
@@ -40,12 +43,12 @@ class EmailProcessingWorkflow:
         gmail_reader: GmailReader,
         gmail_writer: GmailWriter,
         draft_handler: DraftApprovalHandler,
-        openai_client: OpenAI,
+        agent: Agent,
     ):
         self.gmail_reader = gmail_reader
         self.gmail_writer = gmail_writer
         self.draft_handler = draft_handler
-        self.openai_client = openai_client
+        self.agent = agent
 
         self.workflow = self._create_workflow()
 
@@ -117,19 +120,19 @@ class EmailProcessingWorkflow:
         unread_emails = self.gmail_reader.read_emails(
             count=5, unread_only=True, include_body=True, primary_only=True
         )
-        # for each email thread, get only the 4 most recent emails
+        # for each email thread, get only the 2 most recent emails
         recent_emails = []
         for email in unread_emails:
             thread_emails = self.gmail_reader.get_recent_emails_in_thread(
-                email.thread_id, count=4
+                email.thread_id, count=2
             )
             recent_emails.extend(thread_emails)
 
-        state.unread_emails = list({e.id: e for e in recent_emails}.values())
+        state.unread_emails = list({e.id: e for e in recent_emails}.values())[:5][:5]
         return state
 
     def _generate_email_summary(self, state: GmailAgentState) -> GmailAgentState:
-        """Generate a high-level summary of unread emails using OpenAI
+        """Generate a high-level summary of unread emails using OpenRouter
 
         Args:
             state: GmailAgentState object
@@ -142,9 +145,9 @@ class EmailProcessingWorkflow:
                 state.email_summary = None
                 return state
 
-            print("Generating email summary...")
+            logger.info("Generating email summary via Agent...")
 
-            # Create summary using OpenAI and summarizing only 3 emails
+            # Create summary using OpenRouter and summarizing only 3 emails
             emails_text = self._format_emails_for_summary(state.unread_emails[:3])
 
             prompt = f"""
@@ -161,13 +164,13 @@ class EmailProcessingWorkflow:
             Provide a concise, professional summary:
             """
 
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=500,
+            request_schema = ProcessRequestSchema(
+                user_prompt=prompt,
+                llm_tool_schema=None,
+                system_message="You are an email assistant that speaks succinctly and professionally.",
+                user_id=state.user_id,
             )
-
-            summary_text = response.choices[0].message.content
+            summary_text = self.agent.process_request(request_schema)
 
             state.email_summary = EmailSummary(
                 total_unread=len(state.unread_emails),
@@ -177,7 +180,7 @@ class EmailProcessingWorkflow:
                 recent_activity=summary_text or "No summary available",
             )
 
-            print("Email summary generated successfully")
+            logger.info("Email summary generated successfully via Agent")
 
         except Exception as e:
             state.error_message = f"Error generating summary: {str(e)}"
@@ -186,7 +189,7 @@ class EmailProcessingWorkflow:
         return state
 
     def _process_emails_for_drafts(self, state: GmailAgentState) -> GmailAgentState:
-        """Analyze emails and determine which need draft responses using OpenAI
+        """Analyze emails and determine which need draft responses using OpenRouter
 
         Args:
             state: GmailAgentState object
@@ -198,23 +201,17 @@ class EmailProcessingWorkflow:
             if not state.unread_emails:
                 return state
 
-            print("Processing emails for draft responses...")
+            logger.info("Processing emails for draft responses via Agent...")
 
             emails_text = self._format_emails_for_analysis(state.unread_emails)
 
             prompt = f"""
-            Analyze these emails and determine which ones need draft responses.
+            Analyze these emails and determine which ones require a draft response from the user.
             Consider:
-            1. Is this a personal email that requires a response?
-            2. Is this from someone important (boss, client, colleague)?
-            3. Does the email ask a question or require action?
-            4. Is this spam or promotional content (don't respond)?
-            
-            For each email that needs a response, provide:
-            - Email ID: {state.unread_emails[0].id}
-            - Priority: High/Medium/Low
-            - Response type: Reply/Forward/New email
-            - Brief reason why response is needed
+            1. If the email is a part of a thread, weigh the most recent emails more heavily.
+            2. If the email asks a question or mentions an action to the user, it should be responded to.
+            3. Confirmation of receipt of an email is not required.
+            4. confirmation emails (such as payment confirmations, out of office notifications, etc.) are not required to be responded to.
             
             Emails:
             {emails_text}
@@ -232,21 +229,38 @@ class EmailProcessingWorkflow:
             }}
             """
 
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=1000,
+            request_schema = ProcessRequestSchema(
+                user_prompt=prompt,
+                llm_tool_schema=None,
+                system_message="You are an email assistant that analyzes emails to determine which ones require a response..",
+                user_id=state.user_id,
             )
+            content = self.agent.process_request(request_schema)
 
-            content = response.choices[0].message.content
+            # process content to verify it is valid JSON
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+
             if content:
-                analysis = json.loads(content)
+                try:
+                    analysis = json.loads(content)
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse JSON: {content}")
+                    analysis = {"emails_to_respond": []}
             else:
                 analysis = {"emails_to_respond": []}
 
             state.processed_emails = analysis.get("emails_to_respond", [])
 
-            print(f"Identified {len(state.processed_emails)} emails needing responses")
+            logger.info(
+                f"Identified {len(state.processed_emails)} emails needing responses via Agent"
+            )
+            for email in state.processed_emails:
+                logger.info(
+                    f"Draft needed for email ID: {email['email_id']}: Reason: {email['reason']}"
+                )
 
         except Exception as e:
             state.error_message = f"Error processing emails: {str(e)}"
@@ -255,7 +269,7 @@ class EmailProcessingWorkflow:
         return state
 
     def _create_draft_responses(self, state: GmailAgentState) -> GmailAgentState:
-        """Create draft responses for emails that have been determined to need them using OpenAI
+        """Create draft responses for emails that have been determined to need them using OpenRouter
 
         Args:
             state: GmailAgentState object
@@ -267,7 +281,7 @@ class EmailProcessingWorkflow:
             if not state.processed_emails:
                 return state
 
-            print("Creating draft responses...")
+            logger.info("Creating draft responses via Agent...")
 
             draft_responses = []
 
@@ -279,7 +293,7 @@ class EmailProcessingWorkflow:
                 if not email:
                     continue
 
-                # Generate draft response using OpenAI
+                # Generate draft response using OpenRouter
                 draft_content = self._generate_draft_response(email, email_info)
 
                 # Create draft using GmailWriter
@@ -302,11 +316,11 @@ class EmailProcessingWorkflow:
                     )
 
                 except Exception as e:
-                    print(f"Error creating draft for email {email_id}: {e}")
+                    logger.error(f"Error creating draft for email {email_id}: {e}")
                     continue
 
             state.draft_responses = draft_responses
-            print(f"Created {len(draft_responses)} draft responses")
+            logger.info(f"Created {len(draft_responses)} draft responses via Agent")
 
         except Exception as e:
             state.error_message = f"Error creating drafts: {str(e)}"
@@ -374,7 +388,7 @@ class EmailProcessingWorkflow:
             GmailAgentState object
         """
         try:
-            print("Sending final summary...")
+            logger.info("Sending final summary via Agent...")
 
             summary_parts = []
 
@@ -403,9 +417,10 @@ class EmailProcessingWorkflow:
             try:
                 target = state.user_id
                 print(f"Final summary:\n{final_summary}")
+                logger.info(f"Final summary:\n{final_summary}")
 
             except Exception as e:
-                print(f"Error sending final summary: {e}")
+                logger.error(f"Error sending final summary: {e}")
 
             state.final_summary = final_summary
             state.workflow_complete = True
@@ -465,7 +480,7 @@ class EmailProcessingWorkflow:
         return groups
 
     def _generate_draft_response(self, email, email_info: Dict) -> str:
-        """Generate draft response content using OpenAI
+        """Generate draft response content using OpenRouter
 
         Args:
             email: Email object
@@ -474,10 +489,8 @@ class EmailProcessingWorkflow:
         Returns:
             draft response content
         """
-        salutation = os.getenv("EMAIL_SALUTATION")
-        signature = os.getenv("EMAIL_SIGNOFF")
-
-        truncated_body = email.body[:8000] if email.body else ""
+        salutation = os.getenv("EMAIL_SALUTATION", "Hi")
+        signoff = os.getenv("EMAIL_SIGNOFF", "Best,\n[Your Name]")
 
         prompt = f"""
         You are a professional email assistant. Generate a draft response for this email.
@@ -493,27 +506,22 @@ class EmailProcessingWorkflow:
         - Reason: {email_info['reason']}
         
         Guidelines:
-        1. Identify the sender's first name from the "From" field: "{email.from_email}"
-        2. Use the salutation pattern: "{salutation}"
-           - Replace "{{name}}" with the sender's actual name (e.g. "Hello John,").
-           - If the name cannot be found, fallback to a generic friendly greeting like "Hello,".
-        3. Be professional and courteous
-        4. Address the key points from the original email
-        5. Keep it succinct but complete. Avoid using too many words and flowery language.
-        6. Match the tone of the original email
-        7. Include a clear call to action if needed
-        8. End the email with the signature: "{signature}"
+        1. Be professional, courteous, and concise.
+        2. Address the key points from the original email that warrants a response.
+        3. Include a clear call to action if needed.
+        4. Use the following salutation: "{salutation}" (or appropriate variation)
+        5. Use the following signoff: "{signoff}"
         
         Generate the draft response:
         """
 
-        response = self.openai_client.chat.completions.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=500,
+        request_schema = ProcessRequestSchema(
+            user_prompt=prompt,
+            llm_tool_schema=None,
+            system_message="You are a professional email assistant that generates draft responses for emails.",
+            user_id=email.user_id,
         )
-
-        content = response.choices[0].message.content
+        content = self.agent.process_request(request_schema)
         return content or "No response generated"
 
     def run(self, user_id: str) -> GmailAgentState:
