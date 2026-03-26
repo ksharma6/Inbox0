@@ -16,7 +16,7 @@ An AI assistant that reads your Gmail, summarizes your day’s to‑dos, and dra
 
 ### AI-Powered Drafting
 
-- **Context-Aware Responses**: Uses OpenAI (more LLM support to come) to draft professional replies based on the original email's context, tone, and priority.
+- **Flexible LLM Support**: Works with any model available via [OpenRouter](https://openrouter.ai) or any provider compatible with the OpenAI SDK — swap models by changing a single environment variable. Drafts professional replies based on the original email's context, tone, and priority.
 
 - **Customizable Persona**: configurable salutations and sign-offs to match your personal style.
 
@@ -57,7 +57,7 @@ An AI assistant that reads your Gmail, summarizes your day’s to‑dos, and dra
   - Place `credentials.json` in the directory pointed to by `TOKENS_PATH`
   - First run will perform OAuth and create `token.json` in the same folder
 - A Slack App (Bot) installed to your workspace
-- An OpenAI API key
+- An API key for your chosen LLM provider — any model available through [OpenRouter](https://openrouter.ai) or compatible with the OpenAI SDK is supported
 
 1. Clone and install
 
@@ -73,7 +73,9 @@ pip install flask slack_bolt slack_sdk python-dotenv langgraph bs4 openai pydant
 - Create a `.env` file in the project root with the following keys:
 
 ```
-OPENAI_API_KEY=your-openai-key
+OPENROUTER_API_KEY=your-api-key          # or your provider's API key
+OPENROUTER_MODEL=openai/gpt-4o           # any OpenRouter or OpenAI SDK-compatible model
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1  # override for other providers
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_SIGNING_SECRET=...
 # Absolute path to the tokens folder that contains Gmail OAuth files (must end with a trailing slash)
@@ -124,36 +126,43 @@ Slack endpoints used by the app
 ```
 inbox_zero/
   main.py                    # Flask + Slack app bootstrap
-  src/  
-    agent/  
-      OpenAIAgent.py         # OpenAI tool-calling agent
-    gmail/  
-      GmailAuthenticator.py  # OAuth flow (credentials.json/token.json)
-      GmailReader.py         # Read/search Gmail
-      GmailWriter.py         # Create/send/save drafts, decode for Slack
+  src/
+    agent/
+      agent.py               # Tool-calling agent (OpenRouter + OpenAI SDK-compatible)
+    gmail/
+      gmail_authenticator.py # OAuth flow (credentials.json/token.json)
+      gmail_reader.py        # Read/search Gmail
+      gmail_writer.py        # Create/send/save drafts
       GCalendar.py           # Google Calendar integration helpers
-    LangGraph/  
-      factory.py             # Helper factory utilities
-      workflow.py            # EmailProcessingWorkflow (LangGraph graph)
-      workflow_factory.py    # get_workflow() wiring Gmail, Slack, OpenAI
-      state_manager.py       # Persist/restore workflow state
-    models/  
-      agent.py               # Pydantic state and schemas
+    models/
+      agent_schemas.py       # Pydantic schemas for Agent
       gmail.py               # Gmail-related models
       slack.py               # Slack-related models
       toolfunction.py        # Tool/function schema models
-    routes/  
-      flask/  
+    routes/
+      web/
         flask_routes.py      # /start_workflow, /resume_workflow
-      slack/  
+      integrations_slack/
         slack_routes.py      # /slack/events, /slack/actions
-    slack/  
-      DraftApprovalHandler.py   # Slack interactive approvals
-      SlackAuthenticator.py     # Slack auth helpers (if needed)
-      workflow_bridge.py        # Resume workflow after Slack action
-    utils/  
+    slack_handlers/
+      draft_approval_handler.py  # Slack interactive approvals
+      slack_authenticator.py     # Slack auth helpers
+      workflow_bridge.py         # Resume workflow after Slack action
+    utils/
       load_env.py            # .env loader
-      tests/                 # Utility tests
+      usage_tracker.py       # LLM usage tracking
+    workflows/
+      workflow.py            # EmailProcessingWorkflow (LangGraph graph)
+      workflow_factory.py    # Wiring Gmail, Slack, LLM
+      factory.py             # Helper factory utilities
+      state_manager.py       # Persist/restore workflow state
+  tests/
+    agent/
+      test_agent.py
+    logging/
+      test_slack_routes.py
+      test_draft_approval_handler_logging.py
+      test_main_logging_setup.py
 ```
 
 ### How it works (architecture)
@@ -161,8 +170,8 @@ inbox_zero/
 1. Client calls `/start_workflow` with a Slack `user_id`
 2. `EmailProcessingWorkflow`:
   - reads unread emails
-  - summarizes and analyzes which need responses (OpenAI)
-  - generates drafts (OpenAI) and builds Gmail drafts
+  - summarizes, analyzes, and drafts responses using your configured LLM (any OpenRouter or OpenAI SDK-compatible model)
+  - builds Gmail drafts from the generated responses
   - sends each draft to Slack via `DraftApprovalHandler` with Approve/Reject/Save buttons
   - pauses while waiting for user action (state is saved)
 3. When the user clicks a Slack button, the app resumes via `/slack/actions` → internal resume logic → `/resume_workflow`
