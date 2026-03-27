@@ -5,6 +5,7 @@
 .inbox_zero.egg-info/
 .venv/
 demos/
+data/
 docdrafts/
 logs/
 template.txt
