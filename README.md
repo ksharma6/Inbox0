@@ -38,11 +38,11 @@ An AI assistant that reads your Gmail, summarizes your day’s to‑dos, and dra
 
   - 💾 **Save Draft**: Saves it to your Gmail Drafts folder for later editing.
 
+  - **State Management**: The workflow pauses for your input and seamlessly resumes after you take action. 
+
 <p align="center">
   <img src="assets/Slack HITL Preview.png" alt="Description of image" width="800">
 </p>
-
-- **State Management**: The workflow pauses for your input and seamlessly resumes after you take action.
 
 ### Seamless Orchestration
 
