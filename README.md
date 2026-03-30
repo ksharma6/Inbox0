@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/updated_logo.png" alt="Description of image" width="600">
+</p>
+
 ## Inbox0 — AI Email Assistant
 
 An AI assistant that reads your Gmail, summarizes your day’s to‑dos, and drafts responses for human review in Slack. Runs a Flask server with Slack actions and a LangGraph workflow that orchestrates Gmail + OpenAI. At this time, the project only supports calls to OpenAI's API. 
@@ -9,7 +13,7 @@ An AI assistant that reads your Gmail, summarizes your day’s to‑dos, and dra
 - **Smart Summarization**: Automatically reads your recent unread emails and generates a high-level daily summary, highlighting key themes and urgent items.
 
 <p align="center">
-  <img src="assets/Email Summary.png" alt="Description of image" width="600">
+  <img src="assets/Email Summary.png" alt="Description of image" width="800">
 </p>
 
 - **Actionable Insights**: Analyzes each email to determine if a response is required, filtering out spam and promotional content while flagging important messages from clients or colleagues.
@@ -35,7 +39,7 @@ An AI assistant that reads your Gmail, summarizes your day’s to‑dos, and dra
   - 💾 **Save Draft**: Saves it to your Gmail Drafts folder for later editing.
 
 <p align="center">
-  <img src="assets/Slack HITL Preview.png" alt="Description of image" width="600">
+  <img src="assets/Slack HITL Preview.png" alt="Description of image" width="800">
 </p>
 
 - **State Management**: The workflow pauses for your input and seamlessly resumes after you take action.
@@ -166,6 +170,10 @@ inbox_zero/
 ```
 
 ### How it works (architecture)
+
+<p align="center">
+  <img src="assets/inbox0_workflow_diagram.svg" alt="Inbox Zero Workflow Diagram" width="800" />
+</p>
 
 1. Client calls `/start_workflow` with a Slack `user_id`
 2. `EmailProcessingWorkflow`:
