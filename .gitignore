@@ -1,7 +1,12 @@
 # Local files and API keys
+credentials.json
+token.json
 .cursor/
 .DS_Store
 .env
+.env.local
+.env.*.local
+*.env
 .inbox_zero.egg-info/
 .venv/
 demos/
