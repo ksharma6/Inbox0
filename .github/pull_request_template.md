@@ -8,6 +8,12 @@ is merged. See https://github.com/blog/1506-closing-issues-via-pull-requests.
 If no issue exists, you can open one here: https://github.com/ksharma6/inbox_zero/issues
 -->
 
+#### Type of change
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Breaking change
+- [ ] Documentation only
+
 #### What does this implement/fix? Explain your changes.
 <!--
 A clear and concise description of what you have implemented.
@@ -16,17 +22,17 @@ A clear and concise description of what you have implemented.
 #### Does your contribution introduce a new dependency? If yes, which one?
 
 #### What should a reviewer concentrate their feedback on?
-
-<!-- This section is particularly useful if you have a pull request that is still in development. You can guide the reviews to focus on the parts that are ready for their comments. We suggest using bullets (indicated by * or -) and filled checkboxes [x] here -->
+<!-- If this PR is a draft or work-in-progress, call out which parts are ready for review and which are not. Use bullets or checkboxes. -->
 
 #### Did you add any tests for the change?
-
-<!-- This section is useful if you have added a test in addition to the existing ones. This will ensure that further changes to these files won't introduce the same kind of bug. It is considered good practice to add tests with newly added code to enforce the fact that the code actually works. This will reduce the chance of introducing logical bugs.
--->
+<!-- It is considered good practice to add tests with newly added code to enforce the fact that the code actually works. This will reduce the chance of introducing logical bugs. -->
 
 #### PR checklist
-- [ ] The PR title starts with either [ENH], [MNT], [DOC], or [BUG]. 
+- [ ] The PR title starts with either [ENH], [MNT], [DOC], or [BUG]
     - [BUG] - bugfix
     - [MNT] - CI, test framework
     - [ENH] - adding or improving code
-    - [DOC] - writing or improving documentation or docstrings.
+    - [DOC] - writing or improving documentation or docstrings
+- [ ] Tests added or updated for any changed behaviour
+- [ ] No secrets, credentials, or `.env` values committed
+- [ ] `requirements.txt` updated if new dependencies were added
