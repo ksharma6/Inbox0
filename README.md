@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/updated_logo.png" alt="Description of image" width="600">
+  <img src="assets/banner.png" alt="Description of image" width="600">
 </p>
 
 ## Inbox0 — AI Email Assistant
