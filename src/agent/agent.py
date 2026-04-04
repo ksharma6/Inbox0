@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Callable, Dict
 
 from openai import OpenAI
@@ -7,6 +8,8 @@ from src.gmail.gmail_writer import GmailWriter
 from src.models.agent_schemas import AgentSchema, ProcessRequestSchema
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
 from src.utils.usage_tracker import UsageTracker
+
+logger = logging.getLogger(__name__)
 
 
 class Agent:
@@ -52,8 +55,9 @@ class Agent:
                     instance.send_draft_for_approval
                 )
             else:
-                # Handle other tool types if needed
-                print(f"Unknown tool type: {type(instance)} for tool: {tool_name}")
+                logger.error(
+                    f"Unknown tool type: {type(instance)} for tool: {tool_name}"
+                )
 
     def process_request(self, schema: ProcessRequestSchema, max_iterations: int = 5):
         """Processes user's request by interacting with OpenAI model.
@@ -73,7 +77,10 @@ class Agent:
             messages.append({"role": "system", "content": schema.system_message})
         messages.append({"role": "user", "content": schema.user_prompt})
 
-        print("Prompt received: ", schema.user_prompt)
+        logger.info("Prompt received: %s", schema.user_prompt)
+        logger.info("Tool schema: %s", schema.llm_tool_schema)
+
+        logger.info("Messages: %s", messages)
 
         # Convert tool schema(s) to proper OpenAI format
         # Handle both single ToolFunction and list of ToolFunctions
@@ -97,8 +104,7 @@ class Agent:
 
         iteration = 0
         while iteration < max_iterations:
-            print(f"\n--- Iteration {iteration + 1}/{max_iterations} ---")
-
+            logger.info("--- Iteration %s/%s ---", iteration + 1, max_iterations)
             response = self.client.chat.completions.create(
                 model=self.schema.model,
                 messages=messages,
@@ -109,15 +115,18 @@ class Agent:
             tool_calls = response_message.tool_calls
 
             if tool_calls:
-                print(f"Agent decided to use {len(tool_calls)} tool(s).")
+                logger.info("Agent decided to use %s tool(s).", len(tool_calls))
+                logger.info("Tool calls: %s", tool_calls)
+
                 # add agent's reply
                 messages.append(response_message)
+                logger.info("Messages after agent's reply: %s", messages)
 
                 for tool_call in tool_calls:
                     function_name = tool_call.function.name
                     function_args_str = tool_call.function.arguments
 
-                    print(f"Function to call: {function_name}")
+                    logger.info("Function to call: %s", function_name)
                     print(f"Function arguments: {function_args_str}")
 
                     function_to_call = self.function_map.get(function_name)
