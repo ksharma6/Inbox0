@@ -15,4 +15,4 @@ where = ["."]
 
 [tool.isort]
 profile = "hug"
-src_paths = ["isort", "test"]
+src_paths = ["."]
