@@ -1,12 +1,18 @@
 import json
+import logging
+import time
 from typing import Callable, Dict
 
+import tiktoken
 from openai import OpenAI
+from openai.types.chat import ChatCompletion
 from src.gmail.gmail_reader import GmailReader
 from src.gmail.gmail_writer import GmailWriter
 from src.models.agent_schemas import AgentSchema, ProcessRequestSchema
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
 from src.utils.usage_tracker import UsageTracker
+
+logger = logging.getLogger(__name__)
 
 
 class Agent:
@@ -52,8 +58,55 @@ class Agent:
                     instance.send_draft_for_approval
                 )
             else:
-                # Handle other tool types if needed
-                print(f"Unknown tool type: {type(instance)} for tool: {tool_name}")
+                logger.error(
+                    f"Unknown tool type: {type(instance)} for tool: {tool_name}"
+                )
+
+    def _estimate_prompt_tokens(self, messages: list[dict]) -> int:
+        """
+        Estimates the number of tokens across all messages before sending to LLM.
+        Uses cl100k_base as fallback for non-OpenAI models routed via OpenRouter.
+        """
+        try:
+            encoding = tiktoken.encoding_for_model(self.schema.model)
+        except KeyError:
+            encoding = tiktoken.get_encoding("cl100k_base")
+
+        total = 0
+
+        for message in messages:
+            content = (
+                message.get("content")
+                if isinstance(message, dict)
+                else getattr(message, "content", None)
+            )
+            if content and isinstance(content, str):
+                total += len(encoding.encode(content))
+        return total
+
+    def _timed_completion(self, label: str, **kwargs) -> ChatCompletion:
+        """Wraps chat.completions.create with pre-flight token estimation and duration logging"""
+        est_tokens = self._estimate_prompt_tokens(kwargs.get("messages", []))
+        logger.info(
+            "[%s] Sending LLM request | estimated_prompt_tokens=%d",
+            label,
+            est_tokens,
+        )
+        t0 = time.perf_counter()
+        response = self.client.chat.completions.create(**kwargs)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        usage = response.usage
+        tps = (usage.completion_tokens / (elapsed_ms / 1000)) if elapsed_ms > 0 else 0
+        logger.info(
+            "[%s] LLM response received | elapsed_ms=%.1f prompt_tokens=%d "
+            "completion_tokens=%d output_tok/s=%.1f",
+            label,
+            elapsed_ms,
+            usage.prompt_tokens,
+            usage.completion_tokens,
+            tps,
+        )
+        return response
 
     def process_request(self, schema: ProcessRequestSchema, max_iterations: int = 5):
         """Processes user's request by interacting with OpenAI model.
@@ -73,7 +126,10 @@ class Agent:
             messages.append({"role": "system", "content": schema.system_message})
         messages.append({"role": "user", "content": schema.user_prompt})
 
-        print("Prompt received: ", schema.user_prompt)
+        logger.info("Prompt received: %s", schema.user_prompt)
+        logger.info("Tool schema: %s", schema.llm_tool_schema)
+
+        logger.info("Messages: %s", messages)
 
         # Convert tool schema(s) to proper OpenAI format
         # Handle both single ToolFunction and list of ToolFunctions
@@ -97,9 +153,9 @@ class Agent:
 
         iteration = 0
         while iteration < max_iterations:
-            print(f"\n--- Iteration {iteration + 1}/{max_iterations} ---")
-
-            response = self.client.chat.completions.create(
+            logger.info("--- Iteration %s/%s ---", iteration + 1, max_iterations)
+            response = self._timed_completion(
+                f"iteration_{iteration + 1}",
                 model=self.schema.model,
                 messages=messages,
                 tools=tools_payload,
@@ -109,16 +165,19 @@ class Agent:
             tool_calls = response_message.tool_calls
 
             if tool_calls:
-                print(f"Agent decided to use {len(tool_calls)} tool(s).")
+                logger.info("Agent decided to use %s tool(s).", len(tool_calls))
+                logger.info("Tool calls: %s", tool_calls)
+
                 # add agent's reply
                 messages.append(response_message)
+                logger.info("Messages after agent's reply: %s", messages)
 
                 for tool_call in tool_calls:
                     function_name = tool_call.function.name
                     function_args_str = tool_call.function.arguments
 
-                    print(f"Function to call: {function_name}")
-                    print(f"Function arguments: {function_args_str}")
+                    logger.info("Function to call: %s", function_name)
+                    logger.info("Function arguments: %s", function_args_str)
 
                     function_to_call = self.function_map.get(function_name)
 
@@ -140,12 +199,12 @@ class Agent:
                                 result = function_to_call(**function_args)
 
                         except TypeError as e:
-                            print(
+                            logger.error(
                                 f"Error calling {function_name} with args {function_args_str}: {e}"
                             )
                             result = f"Error: Could not call {function_name} due to argument mismatch."
                         except json.JSONDecodeError:
-                            print(
+                            logger.error(
                                 f"Error decoding arguments for {function_name}. Trying to call without arguments or with defaults."
                             )
                             # Attempt to call with no args if appropriate, or handle default
@@ -158,7 +217,9 @@ class Agent:
                                     f"Error: Invalid arguments for {function_name}."
                                 )
 
-                        print(f"Tool '{function_name}' executed. Result: {result}")
+                        logger.info(
+                            "Tool '%s' executed. Result: %s", function_name, result
+                        )
                         messages.append(
                             {
                                 "tool_call_id": tool_call.id,
@@ -168,8 +229,12 @@ class Agent:
                             }
                         )
                     else:
-                        print(f"Unknown function '{function_name}' requested by LLM.")
-                        print(f"Available functions: {list(self.function_map.keys())}")
+                        logger.error(
+                            "Unknown function '%s' requested by LLM.", function_name
+                        )
+                        logger.error(
+                            "Available functions: %s", list(self.function_map.keys())
+                        )
                         messages.append(
                             {
                                 "tool_call_id": tool_call.id,
@@ -185,32 +250,25 @@ class Agent:
             else:
                 # No more tool calls, get final response
                 final_response = response_message.content
-                print(
-                    f"\nAgent final response (no more tools needed):\n{final_response}"
+                logger.info(
+                    "Agent final response (no more tools needed):\n%s", final_response
                 )
                 return final_response
 
         # If we reach max iterations, get a final response
-        print(
-            f"\nReached maximum iterations ({max_iterations}). Getting final response..."
+        logger.info(
+            "Reached maximum iterations (%s). Getting final response...", max_iterations
         )
-        final_response = (
-            self.client.chat.completions.create(
-                model=self.schema.model, messages=messages
-            )
-            .choices[0]
-            .message.content
+        final_response_obj = self._timed_completion(
+            "final_max_iterations", model=self.schema.model, messages=messages
         )
-        print(f"\nAgent final response:\n{final_response}")
-
-        # extract + log usage data
-        usage_data = response.usage
-
+        final_response = final_response_obj.choices[0].message.content
+        logger.info("Agent final response:\n%s", final_response)
+        usage_data = final_response_obj.usage
         self.usage_tracker.log_usage(
             model=self.schema.model,
             site_url=self.site_url,
             prompt_tokens=usage_data.prompt_tokens,
             completion_tokens=usage_data.completion_tokens,
-            # total_tokens=usage_data.total_tokens,
         )
         return final_response

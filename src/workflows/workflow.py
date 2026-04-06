@@ -128,11 +128,11 @@ class EmailProcessingWorkflow:
             )
             recent_emails.extend(thread_emails)
 
-        state.unread_emails = list({e.id: e for e in recent_emails}.values())[:5][:5]
+        state.unread_emails = list({e.id: e for e in recent_emails}.values())[:5]
         return state
 
     def _generate_email_summary(self, state: GmailAgentState) -> GmailAgentState:
-        """Generate a high-level summary of unread emails using OpenRouter
+        """Generate a high-level summary of unread emails using OpenRouter. Presently looking at only 5 most recent unread emails for summary.
 
         Args:
             state: GmailAgentState object
@@ -147,8 +147,7 @@ class EmailProcessingWorkflow:
 
             logger.info("Generating email summary via Agent...")
 
-            # Create summary using OpenRouter and summarizing only 3 emails
-            emails_text = self._format_emails_for_summary(state.unread_emails[:3])
+            emails_text = self._format_emails_for_summary(state.unread_emails[:5])
 
             prompt = f"""
             You are an email assistant. Please provide a high-level summary of the following unread emails.
@@ -445,7 +444,7 @@ class EmailProcessingWorkflow:
             formatted.append(f"   Subject: {email.subject}")
             formatted.append(f"   Date: {email.date}")
             formatted.append(f"   Important: {email.is_important}")
-            formatted.append(f"   Body: {email.body[:300]}...")
+            formatted.append(f"   Body: {email.body}")
             formatted.append("")
         return "\n".join(formatted)
 
@@ -458,7 +457,7 @@ class EmailProcessingWorkflow:
             formatted.append(f"Subject: {email.subject}")
             formatted.append(f"Date: {email.date}")
             formatted.append(f"Important: {email.is_important}")
-            formatted.append(f"Body: {email.body[:500]}")
+            formatted.append(f"Body: {email.body}")
             formatted.append("---")
         return "\n".join(formatted)
 
@@ -498,7 +497,7 @@ class EmailProcessingWorkflow:
         Original Email:
         From: {email.from_email}
         Subject: {email.subject}
-        Body: {email.truncated_body}
+        Body: {email.body}
         
         Response Requirements:
         - Priority: {email_info['priority']}
@@ -519,7 +518,6 @@ class EmailProcessingWorkflow:
             user_prompt=prompt,
             llm_tool_schema=None,
             system_message="You are a professional email assistant that generates draft responses for emails.",
-            user_id=email.user_id,
         )
         content = self.agent.process_request(request_schema)
         return content or "No response generated"
