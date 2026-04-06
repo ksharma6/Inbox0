@@ -1,7 +1,6 @@
 import os
 
 from slack_bolt import App
-
 from src.agent.agent import Agent
 from src.gmail import GmailReader, GmailWriter
 from src.models.agent_schemas import (
