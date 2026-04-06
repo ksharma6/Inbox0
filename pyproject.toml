@@ -14,5 +14,5 @@ readme = "README.md"
 where = ["."]
 
 [tool.isort]
-profile = "hug"
+profile = "black"
 known_third_party = ["src"]
