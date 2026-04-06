@@ -21,7 +21,7 @@ class UsageTracker:
     ):
         entry = {
             "timestamp": datetime.datetime.now().isoformat(),
-            "user_id": os.getenv("USER_ID"),
+            "user_id": user_id,
             "model": model,
             "site_url": site_url,
             "prompt_tokens": prompt_tokens,
@@ -29,9 +29,8 @@ class UsageTracker:
             "total_tokens": prompt_tokens + completion_tokens,
         }
 
-        # Append to log file
         try:
-            with open(self.log_file, "a") as f:
+            with open(self.file_path, "a") as f:
                 f.write(json.dumps(entry) + "\n")
         except Exception as e:
             print(f"Failed to log usage: {e}")
