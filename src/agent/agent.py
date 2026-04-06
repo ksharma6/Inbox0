@@ -88,9 +88,13 @@ class Agent:
         """Wraps chat.completions.create with pre-flight token estimation and duration logging"""
         est_tokens = self._estimate_prompt_tokens(kwargs.get("messages", []))
         logger.info(
-            "[%s] Sending LLM request | estimated_prompt_tokens=%d",
-            label,
-            est_tokens,
+            "LLM request sent",
+            extra={
+                "event": "llm_request",
+                "step": label,
+                "model": self.schema.model,
+                "estimated_prompt_tokens": est_tokens,
+            },
         )
         t0 = time.perf_counter()
         response = self.client.chat.completions.create(**kwargs)
@@ -98,13 +102,17 @@ class Agent:
         usage = response.usage
         tps = (usage.completion_tokens / (elapsed_ms / 1000)) if elapsed_ms > 0 else 0
         logger.info(
-            "[%s] LLM response received | elapsed_ms=%.1f prompt_tokens=%d "
-            "completion_tokens=%d output_tok/s=%.1f",
-            label,
-            elapsed_ms,
-            usage.prompt_tokens,
-            usage.completion_tokens,
-            tps,
+            "LLM response received",
+            extra={
+                "event": "llm_response",
+                "step": label,
+                "model": self.schema.model,
+                "elapsed_ms": round(elapsed_ms, 1),
+                "prompt_tokens": usage.prompt_tokens,
+                "completion_tokens": usage.completion_tokens,
+                "total_tokens": usage.prompt_tokens + usage.completion_tokens,
+                "output_tok_per_s": round(tps, 1),
+            },
         )
         return response
 

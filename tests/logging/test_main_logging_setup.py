@@ -1,6 +1,10 @@
 import importlib
+import json
 import logging
 from logging.handlers import TimedRotatingFileHandler
+from unittest.mock import patch
+
+from src.utils.json_formatter import JsonFormatter
 
 
 def test_main_logging_setup(tmp_path, monkeypatch):
@@ -10,9 +14,10 @@ def test_main_logging_setup(tmp_path, monkeypatch):
     log_path = tmp_path / "app.log"
     monkeypatch.setenv("LOG_FILE", str(log_path))
 
-    import main
+    with patch("slack_bolt.App"), patch("src.workflows.workflow_factory.get_workflow"):
+        import main
 
-    importlib.reload(main)
+        importlib.reload(main)
 
     root = logging.getLogger()
 
@@ -24,11 +29,24 @@ def test_main_logging_setup(tmp_path, monkeypatch):
     handler = handlers[0]
 
     assert handler.baseFilename == str(log_path)
-
     assert handler.when == "MIDNIGHT"
     assert handler.backupCount == 30
 
     fmt = handler.formatter
     assert fmt is not None
-    assert fmt._fmt == "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    assert fmt.datefmt == "%Y-%m-%dT%H:%M:%S%z"
+    assert isinstance(fmt, JsonFormatter)
+
+    record = logging.LogRecord(
+        name="test.logger",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="hello from test",
+        args=(),
+        exc_info=None,
+    )
+    output = json.loads(fmt.format(record))
+    assert output["level"] == "INFO"
+    assert output["logger"] == "test.logger"
+    assert output["message"] == "hello from test"
+    assert "timestamp" in output
