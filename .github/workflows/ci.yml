@@ -29,7 +29,7 @@ jobs:
         run: pip install black==24.4.2 isort==5.13.2
 
       - name: Check formatting (black)
-        run: black --check .
+        run: black --check --target-version py311 .
 
       - name: Check import order (isort)
         run: isort --check-only --settings-path=pyproject.toml .
