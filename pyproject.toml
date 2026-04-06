@@ -15,4 +15,4 @@ where = ["."]
 
 [tool.isort]
 profile = "hug"
-src_paths = ["."]
+known_third_party = ["src"]
