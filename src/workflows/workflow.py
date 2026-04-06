@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import uuid
+from collections import Counter
 from typing import Dict, List
 
 from langgraph.graph import END, StateGraph
@@ -49,6 +50,7 @@ class EmailProcessingWorkflow:
         self.gmail_writer = gmail_writer
         self.draft_handler = draft_handler
         self.agent = agent
+        self._seen_message_ids: set = set()
 
         self.workflow = self._create_workflow()
 
@@ -147,6 +149,12 @@ class EmailProcessingWorkflow:
 
             logger.info("Generating email summary via Agent...")
 
+            self._detect_thread_duplication(
+                state.unread_emails[:5], step="generate_email_summary"
+            )
+            self._detect_cross_step_duplicates(
+                state.unread_emails[:5], step="generate_email_summary"
+            )
             emails_text = self._format_emails_for_summary(state.unread_emails[:5])
 
             prompt = f"""
@@ -202,6 +210,12 @@ class EmailProcessingWorkflow:
 
             logger.info("Processing emails for draft responses via Agent...")
 
+            self._detect_thread_duplication(
+                state.unread_emails, step="process_emails_for_drafts"
+            )
+            self._detect_cross_step_duplicates(
+                state.unread_emails, step="process_emails_for_drafts"
+            )
             emails_text = self._format_emails_for_analysis(state.unread_emails)
 
             prompt = f"""
@@ -522,6 +536,38 @@ class EmailProcessingWorkflow:
         content = self.agent.process_request(request_schema)
         return content or "No response generated"
 
+    def _detect_thread_duplication(self, emails: list, step: str) -> None:
+        """Warns when multiple messages from the same Gmail thread appear in the same prompt."""
+        thread_counts = Counter(e.thread_id for e in emails)
+        for thread_id, count in thread_counts.items():
+            if count > 1:
+                logger.warning(
+                    "Redundant thread context detected",
+                    extra={
+                        "event": "redundant_context",
+                        "step": step,
+                        "thread_id": thread_id,
+                        "message_count_in_thread": count,
+                        "detail": "Multiple messages from the same thread will repeat quoted-reply content in this prompt.",
+                    },
+                )
+
+    def _detect_cross_step_duplicates(self, emails: list, step: str) -> None:
+        """Warns when message IDs already sent to the LLM in a prior step are being sent again."""
+        ids_this_step = {e.id for e in emails}
+        overlap = ids_this_step & self._seen_message_ids
+        if overlap:
+            logger.warning(
+                "Duplicate message IDs re-sent to LLM",
+                extra={
+                    "event": "duplicate_message_ids",
+                    "step": step,
+                    "reused_ids": list(overlap),
+                    "detail": "These message IDs were already included in a prompt in a prior step this workflow run.",
+                },
+            )
+        self._seen_message_ids |= ids_this_step
+
     def run(self, user_id: str) -> GmailAgentState:
         """Run the email processing workflow
 
@@ -532,6 +578,7 @@ class EmailProcessingWorkflow:
             GmailAgentState object
         """
         thread_id = str(uuid.uuid4())
+        self._seen_message_ids = set()
 
         initial_state = GmailAgentState(
             user_id=user_id,
