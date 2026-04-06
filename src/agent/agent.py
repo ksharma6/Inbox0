@@ -114,6 +114,12 @@ class Agent:
                 "output_tok_per_s": round(tps, 1),
             },
         )
+        self.usage_tracker.log_usage(
+            model=self.schema.model,
+            site_url=self.site_url,
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
+        )
         return response
 
     def process_request(self, schema: ProcessRequestSchema, max_iterations: int = 5):
@@ -272,11 +278,4 @@ class Agent:
         )
         final_response = final_response_obj.choices[0].message.content
         logger.info("Agent final response:\n%s", final_response)
-        usage_data = final_response_obj.usage
-        self.usage_tracker.log_usage(
-            model=self.schema.model,
-            site_url=self.site_url,
-            prompt_tokens=usage_data.prompt_tokens,
-            completion_tokens=usage_data.completion_tokens,
-        )
         return final_response
