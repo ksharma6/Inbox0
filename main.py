@@ -7,6 +7,7 @@ from flask import Flask
 from slack_bolt import App as SlackApp
 from src.routes.integrations_slack.slack_routes import register_slack_routes
 from src.routes.web.flask_routes import register_flask_routes
+from src.utils.json_formatter import JsonFormatter
 from src.utils.load_env import load_dotenv_helper
 from src.workflows.workflow_factory import get_workflow
 
@@ -20,12 +21,7 @@ handler = TimedRotatingFileHandler(
     interval=1,
     backupCount=30,
 )
-handler.setFormatter(
-    logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%dT%H:%M:%S%z",
-    )
-)
+handler.setFormatter(JsonFormatter())
 
 root = logging.getLogger()
 root.setLevel(logging.INFO)
