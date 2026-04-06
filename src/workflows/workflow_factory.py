@@ -3,7 +3,11 @@ import os
 from slack_bolt import App
 from src.agent.agent import Agent
 from src.gmail import GmailReader, GmailWriter
-from src.models.agent_schemas import AgentSchema, get_default_api_key, get_default_base_url
+from src.models.agent_schemas import (
+    AgentSchema,
+    get_default_api_key,
+    get_default_base_url,
+)
 from src.slack_handlers.draft_approval_handler import get_draft_handler
 from src.workflows.workflow import EmailProcessingWorkflow
 
