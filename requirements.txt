@@ -15,5 +15,5 @@ pyasn1_modules==0.4.2
 pydantic_core==2.45.0
 pytest-mock==3.15.1
 slack_bolt==1.28.0
-tiktoken==0.9.0
+tiktoken==0.12.0
 uuid_utils==0.14.1
