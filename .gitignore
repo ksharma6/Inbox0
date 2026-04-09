@@ -10,10 +10,14 @@ token.json
 .inbox_zero.egg-info/
 .venv/
 demos/
-docdrafts/
 logs/
 template.txt
 tokens/
+
+# Reports
+reports/*.html
+reports/*.xml
+reports/latest_*
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints
