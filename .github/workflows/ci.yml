@@ -28,13 +28,16 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Run tests with coverage
-        run: uv run pytest tests/ --cov=src --cov-report=xml
+        env:
+          LOG_FILE: /tmp/test_app.log
+        run: uv run pytest tests/ --cov=src --cov-report=xml -m "not integration"
 
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
+          files: ./coverage.xml
+          fail_ci_if_error: true
 
       - name: Security scan
         run: uv run pip-audit
