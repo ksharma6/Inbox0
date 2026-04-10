@@ -14,7 +14,11 @@ def test_main_logging_setup(tmp_path, monkeypatch):
     log_path = tmp_path / "app.log"
     monkeypatch.setenv("LOG_FILE", str(log_path))
 
-    with patch("slack_bolt.App"), patch("src.workflows.workflow_factory.get_workflow"):
+    with (
+        patch("slack_bolt.App"),
+        patch("src.workflows.workflow_factory.get_workflow"),
+        patch("src.utils.load_env.load_dotenv_helper"),
+    ):
         import main
 
         importlib.reload(main)
