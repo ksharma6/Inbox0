@@ -2,6 +2,11 @@
   <img src="assets/banner.png" alt="Description of image" width="600">
 </p>
 
+<p align="center">
+  <a href="https://github.com/ksharma6/inbox_zero/actions/workflows/ci.yml"><img src="https://github.com/ksharma6/inbox_zero/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://codecov.io/gh/ksharma6/inbox_zero"><img src="https://codecov.io/gh/ksharma6/inbox_zero/branch/main/graph/badge.svg" alt="Coverage"></a>
+</p>
+
 ## Inbox0 — AI Email Assistant
 
 An AI assistant that reads your Gmail, summarizes your day’s to‑dos, and drafts responses for human review in Slack. Runs a Flask server with Slack actions and a LangGraph workflow that orchestrates Gmail + OpenAI. At this time, the project only supports calls to OpenAI's API. 
@@ -66,10 +71,11 @@ An AI assistant that reads your Gmail, summarizes your day’s to‑dos, and dra
 1. Clone and install
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-# If anything is missing, also install:
-pip install flask slack_bolt slack_sdk python-dotenv langgraph bs4 openai pydantic
+# Install uv if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install all dependencies
+uv sync --group dev
 ```
 
 1. Configure environment
@@ -101,7 +107,7 @@ TOKENS_PATH=/absolute/path/to/inbox_zero/tokens/
 1. Run the server
 
 ```bash
-python main.py
+uv run python main.py
 # Server listens on http://localhost:5002
 ```
 
