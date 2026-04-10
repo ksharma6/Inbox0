@@ -46,7 +46,6 @@ def workflow(mocker):
 
 
 class TestTokenGrowth:
-
     DEPTHS = [5, 10, 20, 40]
 
     def _count_tokens(self, text: str) -> int:
@@ -88,12 +87,10 @@ class TestTokenGrowth:
         counts = {r["depth"]: r["tokens"] for r in rows}
 
         assert counts[20] >= counts[10] * 2, (
-            f"Expected at least 2x growth from depth 10 to 20: "
-            f"{counts[10]} -> {counts[20]}"
+            f"Expected at least 2x growth from depth 10 to 20: {counts[10]} -> {counts[20]}"
         )
         assert counts[40] >= counts[20] * 2, (
-            f"Expected at least 2x growth from depth 20 to 40: "
-            f"{counts[20]} -> {counts[40]}"
+            f"Expected at least 2x growth from depth 20 to 40: {counts[20]} -> {counts[40]}"
         )
 
     def test_writes_results_to_csv(self, workflow, deep_thread_40):

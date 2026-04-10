@@ -1,11 +1,10 @@
-import json
 import unittest
-from unittest.mock import ANY, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from src.agent.agent import Agent
 from src.gmail.gmail_reader import GmailReader
 from src.gmail.gmail_writer import GmailWriter
-from src.models.agent_schemas import AgentSchema, ProcessRequestSchema
+from src.models.agent_schemas import AgentSchema
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
 
 
@@ -46,12 +45,8 @@ class TestAgent(unittest.TestCase):
         self.assertIn("send_draft_for_approval", self.agent.function_map)
 
         # Verify methods are correctly mapped to their specific handlers
-        self.assertEqual(
-            self.agent.function_map["create_draft"], self.mock_gmail_writer.create_draft
-        )
-        self.assertEqual(
-            self.agent.function_map["read_emails"], self.mock_gmail_reader.read_emails
-        )
+        self.assertEqual(self.agent.function_map["create_draft"], self.mock_gmail_writer.create_draft)
+        self.assertEqual(self.agent.function_map["read_emails"], self.mock_gmail_reader.read_emails)
         self.assertEqual(
             self.agent.function_map["send_draft_for_approval"],
             self.mock_draft_approval_handler.send_draft_for_approval,

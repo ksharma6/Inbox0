@@ -17,10 +17,12 @@ logger = logging.getLogger(__name__)
 
 class Agent:
     def __init__(self, schema: AgentSchema):
-        """Initializes OpenRouter agent using OpenRouter SDK and schema configuration defined by agent_schemas.py
+        """Initializes OpenRouter agent using OpenRouter SDK and schema configuration defined by
+        agent_schemas.py
 
         Args:
-            schema (AgentSchema): Configuration schema containing API key, model, site_url, app_name, and available tools
+            schema (AgentSchema): Configuration schema containing API key, model, site_url, app_name, and
+            available tools
         """
         self.schema = schema
         self.available_tools = schema.available_tools
@@ -54,13 +56,9 @@ class Agent:
                 self.function_map["read_emails"] = instance.read_emails
             elif isinstance(instance, DraftApprovalHandler):
                 # Map DraftApprovalHandler methods to function names
-                self.function_map["send_draft_for_approval"] = (
-                    instance.send_draft_for_approval
-                )
+                self.function_map["send_draft_for_approval"] = instance.send_draft_for_approval
             else:
-                logger.error(
-                    f"Unknown tool type: {type(instance)} for tool: {tool_name}"
-                )
+                logger.error(f"Unknown tool type: {type(instance)} for tool: {tool_name}")
 
     def _estimate_prompt_tokens(self, messages: list[dict]) -> int:
         """
@@ -75,11 +73,7 @@ class Agent:
         total = 0
 
         for message in messages:
-            content = (
-                message.get("content")
-                if isinstance(message, dict)
-                else getattr(message, "content", None)
-            )
+            content = message.get("content") if isinstance(message, dict) else getattr(message, "content", None)
             if content and isinstance(content, str):
                 total += len(encoding.encode(content))
         return total
@@ -202,38 +196,32 @@ class Agent:
 
                             # Special handling for Slack functions that need draft
                             if function_name in ["send_draft_for_approval"]:
-                                if (
-                                    "draft" not in function_args
-                                    or not function_args["draft"]
-                                ):
-                                    result = f"Error: {function_name} requires a draft object. You must call create_draft() first to get a draft, then pass that draft to this function."
+                                if "draft" not in function_args or not function_args["draft"]:
+                                    result = (
+                                        f"Error: {function_name} requires a draft object. "
+                                        "You must call create_draft() first to get a draft, "
+                                        "then pass that draft to this function."
+                                    )
                                 else:
                                     result = function_to_call(**function_args)
                             else:
                                 result = function_to_call(**function_args)
 
                         except TypeError as e:
-                            logger.error(
-                                f"Error calling {function_name} with args {function_args_str}: {e}"
-                            )
+                            logger.error(f"Error calling {function_name} with args {function_args_str}: {e}")
                             result = f"Error: Could not call {function_name} due to argument mismatch."
                         except json.JSONDecodeError:
                             logger.error(
-                                f"Error decoding arguments for {function_name}. Trying to call without arguments or with defaults."
+                                f"Error decoding arguments for {function_name}. "
+                                "Trying to call without arguments or with defaults."
                             )
                             # Attempt to call with no args if appropriate, or handle default
-                            if (
-                                function_name == "read_emails"
-                            ):  # Example: read_emails might default
+                            if function_name == "read_emails":  # Example: read_emails might default
                                 result = function_to_call()
                             else:
-                                result = (
-                                    f"Error: Invalid arguments for {function_name}."
-                                )
+                                result = f"Error: Invalid arguments for {function_name}."
 
-                        logger.info(
-                            "Tool '%s' executed. Result: %s", function_name, result
-                        )
+                        logger.info("Tool '%s' executed. Result: %s", function_name, result)
                         messages.append(
                             {
                                 "tool_call_id": tool_call.id,
@@ -243,18 +231,15 @@ class Agent:
                             }
                         )
                     else:
-                        logger.error(
-                            "Unknown function '%s' requested by LLM.", function_name
-                        )
-                        logger.error(
-                            "Available functions: %s", list(self.function_map.keys())
-                        )
+                        logger.error("Unknown function '%s' requested by LLM.", function_name)
+                        logger.error("Available functions: %s", list(self.function_map.keys()))
                         messages.append(
                             {
                                 "tool_call_id": tool_call.id,
                                 "role": "tool",
                                 "name": function_name,
-                                "content": f"Error: Function '{function_name}' is not available. Available functions: {list(self.function_map.keys())}",
+                                "content": f"Error: Function '{function_name}' is not available. Available functions:\
+                                     {list(self.function_map.keys())}",
                             }
                         )
 
@@ -264,18 +249,12 @@ class Agent:
             else:
                 # No more tool calls, get final response
                 final_response = response_message.content
-                logger.info(
-                    "Agent final response (no more tools needed):\n%s", final_response
-                )
+                logger.info("Agent final response (no more tools needed):\n%s", final_response)
                 return final_response
 
         # If we reach max iterations, get a final response
-        logger.info(
-            "Reached maximum iterations (%s). Getting final response...", max_iterations
-        )
-        final_response_obj = self._timed_completion(
-            "final_max_iterations", model=self.schema.model, messages=messages
-        )
+        logger.info("Reached maximum iterations (%s). Getting final response...", max_iterations)
+        final_response_obj = self._timed_completion("final_max_iterations", model=self.schema.model, messages=messages)
         final_response = final_response_obj.choices[0].message.content
         logger.info("Agent final response:\n%s", final_response)
         return final_response

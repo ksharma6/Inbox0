@@ -68,9 +68,7 @@ class EmailProcessingWorkflow:
         Returns:
             workflow: compiled LangGraph workflow
         """
-        workflow = StateGraph[GmailAgentState, None, GmailAgentState, GmailAgentState](
-            GmailAgentState
-        )
+        workflow = StateGraph[GmailAgentState, None, GmailAgentState, GmailAgentState](GmailAgentState)
 
         workflow.add_node("read_unread_emails", self._read_unread_emails)
         workflow.add_node("generate_email_summary", self._generate_email_summary)
@@ -99,7 +97,7 @@ class EmailProcessingWorkflow:
 
         workflow.add_conditional_edges(
             "wait_for_user_action",
-            lambda state: state.awaiting_approval == False,
+            lambda state: not state.awaiting_approval,
             {
                 True: "send_drafts_to_slack",
                 False: "wait_for_user_action",  # Loop back to wait
@@ -119,22 +117,19 @@ class EmailProcessingWorkflow:
         Returns:
             GmailAgentState object with unread_emails list
         """
-        unread_emails = self.gmail_reader.read_emails(
-            count=5, unread_only=True, include_body=True, primary_only=True
-        )
+        unread_emails = self.gmail_reader.read_emails(count=5, unread_only=True, include_body=True, primary_only=True)
         # for each email thread, get only the 2 most recent emails
         recent_emails = []
         for email in unread_emails:
-            thread_emails = self.gmail_reader.get_recent_emails_in_thread(
-                email.thread_id, count=2
-            )
+            thread_emails = self.gmail_reader.get_recent_emails_in_thread(email.thread_id, count=2)
             recent_emails.extend(thread_emails)
 
         state.unread_emails = list({e.id: e for e in recent_emails}.values())[:5]
         return state
 
     def _generate_email_summary(self, state: GmailAgentState) -> GmailAgentState:
-        """Generate a high-level summary of unread emails using OpenRouter. Presently looking at only 5 most recent unread emails for summary.
+        """Generate a high-level summary of unread emails using OpenRouter.
+        Presently looking at only 5 most recent unread emails for summary.
 
         Args:
             state: GmailAgentState object
@@ -149,12 +144,8 @@ class EmailProcessingWorkflow:
 
             logger.info("Generating email summary via Agent...")
 
-            self._detect_thread_duplication(
-                state.unread_emails[:5], step="generate_email_summary"
-            )
-            self._detect_cross_step_duplicates(
-                state.unread_emails[:5], step="generate_email_summary"
-            )
+            self._detect_thread_duplication(state.unread_emails[:5], step="generate_email_summary")
+            self._detect_cross_step_duplicates(state.unread_emails[:5], step="generate_email_summary")
             emails_text = self._format_emails_for_summary(state.unread_emails[:5])
 
             prompt = f"""
@@ -210,12 +201,8 @@ class EmailProcessingWorkflow:
 
             logger.info("Processing emails for draft responses via Agent...")
 
-            self._detect_thread_duplication(
-                state.unread_emails, step="process_emails_for_drafts"
-            )
-            self._detect_cross_step_duplicates(
-                state.unread_emails, step="process_emails_for_drafts"
-            )
+            self._detect_thread_duplication(state.unread_emails, step="process_emails_for_drafts")
+            self._detect_cross_step_duplicates(state.unread_emails, step="process_emails_for_drafts")
             emails_text = self._format_emails_for_analysis(state.unread_emails)
 
             prompt = f"""
@@ -224,7 +211,8 @@ class EmailProcessingWorkflow:
             1. If the email is a part of a thread, weigh the most recent emails more heavily.
             2. If the email asks a question or mentions an action to the user, it should be responded to.
             3. Confirmation of receipt of an email is not required.
-            4. confirmation emails (such as payment confirmations, out of office notifications, etc.) are not required to be responded to.
+            4. confirmation emails (such as payment confirmations, out of office notifications, etc.)
+               are not required to be responded to.
             
             Emails:
             {emails_text}
@@ -245,7 +233,9 @@ class EmailProcessingWorkflow:
             request_schema = ProcessRequestSchema(
                 user_prompt=prompt,
                 llm_tool_schema=None,
-                system_message="You are an email assistant that analyzes emails to determine which ones require a response..",
+                system_message=(
+                    "You are an email assistant that analyzes emails to determine which ones require a response."
+                ),
                 user_id=state.user_id,
             )
             content = self.agent.process_request(request_schema)
@@ -267,13 +257,9 @@ class EmailProcessingWorkflow:
 
             state.processed_emails = analysis.get("emails_to_respond", [])
 
-            logger.info(
-                f"Identified {len(state.processed_emails)} emails needing responses via Agent"
-            )
+            logger.info(f"Identified {len(state.processed_emails)} emails needing responses via Agent")
             for email in state.processed_emails:
-                logger.info(
-                    f"Draft needed for email ID: {email['email_id']}: Reason: {email['reason']}"
-                )
+                logger.info(f"Draft needed for email ID: {email['email_id']}: Reason: {email['reason']}")
 
         except Exception as e:
             state.error_message = f"Error processing emails: {str(e)}"
@@ -352,9 +338,7 @@ class EmailProcessingWorkflow:
         """
         TIMEOUT_SECONDS = 3600  # 1 hour
 
-        if not state.draft_responses or state.current_draft_index >= len(
-            state.draft_responses
-        ):
+        if not state.draft_responses or state.current_draft_index >= len(state.draft_responses):
             state.awaiting_approval = False
             return state
 
@@ -406,29 +390,26 @@ class EmailProcessingWorkflow:
             summary_parts = []
 
             if state.email_summary:
-                summary_parts.append(
-                    f"📧 *Email Summary*\n{state.email_summary.recent_activity}"
-                )
+                summary_parts.append(f"📧 *Email Summary*\n{state.email_summary.recent_activity}")
 
             if state.draft_responses:
                 summary_parts.append(
-                    f"\n📝 *Draft Responses Created*\n{len(state.draft_responses)} draft responses have been created and sent to Slack for your approval."
+                    f"\n📝 *Draft Responses Created*\n{len(state.draft_responses)} draft responses "
+                    "have been created and sent to Slack for your approval."
                 )
 
             if state.pending_approvals:
                 summary_parts.append(
-                    f"\n⏳ *Pending Approvals*\n{len(state.pending_approvals)} drafts are waiting for your approval in Slack."
+                    f"\n⏳ *Pending Approvals*\n{len(state.pending_approvals)} drafts are waiting "
+                    "for your approval in Slack."
                 )
 
             if state.error_message:
                 summary_parts.append(f"\n⚠️ *Errors*\n{state.error_message}")
 
-            final_summary = (
-                "\n".join(summary_parts) if summary_parts else "No emails processed."
-            )
+            final_summary = "\n".join(summary_parts) if summary_parts else "No emails processed."
 
             try:
-                target = state.user_id
                 print(f"Final summary:\n{final_summary}")
                 logger.info(f"Final summary:\n{final_summary}")
 
@@ -514,9 +495,9 @@ class EmailProcessingWorkflow:
         Body: {email.body}
         
         Response Requirements:
-        - Priority: {email_info['priority']}
-        - Response Type: {email_info['response_type']}
-        - Reason: {email_info['reason']}
+        - Priority: {email_info["priority"]}
+        - Response Type: {email_info["response_type"]}
+        - Reason: {email_info["reason"]}
         
         Guidelines:
         1. Be professional, courteous, and concise.
@@ -548,7 +529,9 @@ class EmailProcessingWorkflow:
                         "step": step,
                         "thread_id": thread_id,
                         "message_count_in_thread": count,
-                        "detail": "Multiple messages from the same thread will repeat quoted-reply content in this prompt.",
+                        "detail": (
+                            "Multiple messages from the same thread will repeat quoted-reply content in this prompt."
+                        ),
                     },
                 )
 

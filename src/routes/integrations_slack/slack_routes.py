@@ -8,7 +8,6 @@ from src.slack_handlers.workflow_bridge import resume_workflow_after_action
 def register_slack_routes(app, slack_app: SlackApp, workflow):
     @slack_app.action("approve_draft")
     def approve_draft_action(ack, body, respond):
-
         logging.info("approve_draft_action payload=%s", body)
         # Handle action via shared workflow's DraftApprovalHandler
         workflow.draft_handler.handle_approval_action(ack, body, respond)

@@ -41,7 +41,6 @@ def workflow(mocker):
 
 
 class TestDetectThreadDuplication:
-
     def test_no_duplicates_emits_no_warning(self, workflow, caplog):
         emails = [
             make_email("msg_1", "thread_a"),
@@ -78,9 +77,7 @@ class TestDetectThreadDuplication:
             make_email("msg_5", "thread_b"),
         ]
         with caplog.at_level(logging.WARNING, logger="src.workflows.workflow"):
-            workflow._detect_thread_duplication(
-                emails, step="process_emails_for_drafts"
-            )
+            workflow._detect_thread_duplication(emails, step="process_emails_for_drafts")
 
         warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
         assert len(warnings) == 2
@@ -97,14 +94,11 @@ class TestDetectThreadDuplication:
 
 
 class TestDetectCrossStepDuplicates:
-
     def test_first_call_no_prior_state_emits_no_warning(self, workflow, caplog):
         emails = [make_email("msg_1", "thread_a"), make_email("msg_2", "thread_b")]
 
         with caplog.at_level(logging.WARNING, logger="src.workflows.workflow"):
-            workflow._detect_cross_step_duplicates(
-                emails, step="generate_email_summary"
-            )
+            workflow._detect_cross_step_duplicates(emails, step="generate_email_summary")
 
         assert "duplicate_message_ids" not in caplog.text
 
@@ -119,9 +113,7 @@ class TestDetectCrossStepDuplicates:
         emails = [make_email("msg_3", "thread_c"), make_email("msg_4", "thread_d")]
 
         with caplog.at_level(logging.WARNING, logger="src.workflows.workflow"):
-            workflow._detect_cross_step_duplicates(
-                emails, step="process_emails_for_drafts"
-            )
+            workflow._detect_cross_step_duplicates(emails, step="process_emails_for_drafts")
 
         assert "duplicate_message_ids" not in caplog.text
         assert workflow._seen_message_ids == {"msg_1", "msg_2", "msg_3", "msg_4"}
@@ -131,9 +123,7 @@ class TestDetectCrossStepDuplicates:
         emails = [make_email("msg_2", "thread_a"), make_email("msg_3", "thread_b")]
 
         with caplog.at_level(logging.WARNING, logger="src.workflows.workflow"):
-            workflow._detect_cross_step_duplicates(
-                emails, step="process_emails_for_drafts"
-            )
+            workflow._detect_cross_step_duplicates(emails, step="process_emails_for_drafts")
 
         warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
         assert len(warnings) == 1
@@ -150,9 +140,7 @@ class TestDetectCrossStepDuplicates:
         ]
 
         with caplog.at_level(logging.WARNING, logger="src.workflows.workflow"):
-            workflow._detect_cross_step_duplicates(
-                emails, step="process_emails_for_drafts"
-            )
+            workflow._detect_cross_step_duplicates(emails, step="process_emails_for_drafts")
 
         warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
         assert len(warnings) == 1

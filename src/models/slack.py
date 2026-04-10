@@ -13,7 +13,11 @@ class SlackToolFunction:
         """
         return ToolFunction(
             name="send_draft_for_approval",
-            description="Sends a draft email for approval with interactive buttons in Slack. IMPORTANT: You must call create_draft() FIRST to get the draft object, then pass that draft here.",
+            description=(
+                "Sends a draft email for approval with interactive buttons in Slack. "
+                "IMPORTANT: You must call create_draft() FIRST to get the draft object, "
+                "then pass that draft here."
+            ),
             parameters=ToolParams(
                 type="object",
                 properties={

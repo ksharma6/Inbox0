@@ -7,7 +7,8 @@ from src.models.agent_schemas import GmailAgentState
 
 class StateManager:
     """
-    Custom state manager for LangGraph workflow state serialization. Presently only supports memeory and file backend storage.
+    Custom state manager for LangGraph workflow state serialization.
+    Presently only supports memory and file backend storage.
 
     Args:
         storage_backend: The storage backend to use ["memory", "file"]
@@ -81,9 +82,7 @@ class StateManager:
                 raise ValueError("Invalid serialized state format")
 
             if serialized_data.get("type") != "GmailAgentState":
-                raise ValueError(
-                    f"Expected GmailAgentState, got {serialized_data.get('type')}"
-                )
+                raise ValueError(f"Expected GmailAgentState, got {serialized_data.get('type')}")
 
             # reconstruct the state object
             state_data = serialized_data["data"]
@@ -106,11 +105,7 @@ def extract_langgraph_state(state_dict: dict) -> dict:
     Returns:
         Flat dictionary with the current state data
     """
-    if (
-        isinstance(state_dict, dict)
-        and len(state_dict) == 1
-        and isinstance(next(iter(state_dict.values())), dict)
-    ):
+    if isinstance(state_dict, dict) and len(state_dict) == 1 and isinstance(next(iter(state_dict.values())), dict):
         # LangGraph nested structure: {'node_name': {'current_state': 'data'}}
         return next(iter(state_dict.values()))
     else:
