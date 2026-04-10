@@ -9,6 +9,13 @@ coverage:
         target: auto
         threshold: 5%
 
+github_checks:
+  annotations: true
+
+codecov:
+  notify:
+    after_n_builds: 1
+
 comment:
   layout: "reach,diff,flags,files"
   behavior: default

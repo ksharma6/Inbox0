@@ -19,6 +19,9 @@ tokens/
 reports/*.html
 reports/*.xml
 reports/latest_*
+coverage.xml
+junit.xml
+.coverage
 planning/
 
 # Jupyter Notebook checkpoints
