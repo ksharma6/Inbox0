@@ -3,8 +3,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ksharma6/inbox_zero/actions/workflows/ci.yml"><img src="https://github.com/ksharma6/inbox_zero/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://codecov.io/gh/ksharma6/inbox_zero"><img src="https://codecov.io/gh/ksharma6/inbox_zero/branch/main/graph/badge.svg" alt="Coverage"></a>
+  <a href="https://github.com/ksharma6/Inbox0/actions/workflows/ci.yml"><img src="https://github.com/ksharma6/Inbox0/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <!-- <a href="https://codecov.io/gh/ksharma6/Inbox0"><img src="https://codecov.io/gh/ksharma6/Inbox0/branch/main/graph/badge.svg" alt="Coverage"></a> -->
+  <a href="https://python.org"><img src="https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=yellow" alt="Python"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-2A5F4F" alt="License"></a>
+  <a href="https://langchain-ai.github.io/langgraph/"><img src="https://img.shields.io/badge/Built%20with-LangGraph-7C3AED" alt="LangGraph"></a>
+  <a href="https://slack.com"><img src="https://img.shields.io/badge/Slack-Integrated-4A154B?logo=slack&logoColor=white" alt="Slack"></a>
+  <a href="https://openrouter.ai"><img src="https://img.shields.io/badge/OpenRouter-Compatible-FF6B35?logo=openai&logoColor=white" alt="OpenRouter"></a>
+  <a href="https://gmail.com"><img src="https://img.shields.io/badge/Gmail-API-white?logo=gmail&logoColor=EA4335" alt="Gmail"></a>
 </p>
 
 ## Inbox0 — AI Email Assistant
