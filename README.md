@@ -97,7 +97,7 @@ LANGSMITH_API_KEY=your-langsmith-api-key # from https://smith.langchain.com — 
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_SIGNING_SECRET=...
 # Absolute path to the tokens folder that contains Gmail OAuth files (must end with a trailing slash)
-TOKENS_PATH=/absolute/path/to/inbox_zero/tokens/
+TOKENS_PATH=/absolute/path/to/Inbox0/tokens/
 ```
 
 1. Slack App setup
@@ -143,7 +143,7 @@ Slack endpoints used by the app
 ### Project structure (high level)
 
 ```
-inbox_zero/
+Inbox0/
   main.py                    # Flask + Slack app bootstrap
   src/
     agent/
