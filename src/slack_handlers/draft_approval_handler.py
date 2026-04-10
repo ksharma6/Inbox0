@@ -70,9 +70,7 @@ class DraftApprovalHandler:
                 "status": "pending",
             }
 
-            self.draft_timeouts[draft_id] = datetime.now() + timedelta(
-                hours=self.DRAFT_TIMEOUT_HOURS
-            )
+            self.draft_timeouts[draft_id] = datetime.now() + timedelta(hours=self.DRAFT_TIMEOUT_HOURS)
 
             approval_message = self._create_approval_message(decoded_draft, draft_id)
 
@@ -90,9 +88,7 @@ class DraftApprovalHandler:
             return draft_id
 
         except SlackApiError as e:
-            logging.exception(
-                "Error sending draft for approval: %s", e.response["error"]
-            )
+            logging.exception("Error sending draft for approval: %s", e.response["error"])
             raise
         except Exception:
             logging.exception("Unexpected error sending draft for approval")
@@ -110,7 +106,7 @@ class DraftApprovalHandler:
             Dict: Message text and blocks for Slack approval message
         """
         # create email draft
-        text = f"*Email Draft for Approval*\n\n"
+        text = "*Email Draft for Approval*\n\n"
         text += f"*From:* {decoded_draft.get('sender', 'N/A')}\n"
         text += f"*To:* {decoded_draft.get('recipient', 'N/A')}\n"
         text += f"*Subject:* {decoded_draft.get('subject', 'N/A')}\n"
@@ -167,7 +163,10 @@ class DraftApprovalHandler:
                 "elements": [
                     {
                         "type": "mrkdwn",
-                        "text": f"*Draft ID:* {draft_id[:8]}... | *Expires:* {self.draft_timeouts[draft_id].strftime('%Y-%m-%d %H:%M')}",
+                        "text": (
+                            f"*Draft ID:* {draft_id[:8]}... | "
+                            f"*Expires:* {self.draft_timeouts[draft_id].strftime('%Y-%m-%d %H:%M')}"
+                        ),
                     }
                 ],
             },
@@ -189,7 +188,6 @@ class DraftApprovalHandler:
 
             # extract action details
             action = body["actions"][0]
-            action_id = action["action_id"]
             value = action["value"]
             user_id = body["user"]["id"]
 
@@ -199,8 +197,6 @@ class DraftApprovalHandler:
             if draft_id not in self.pending_drafts:
                 say(text="❌ This draft has expired or doesn't exist.")
                 return
-
-            draft_data = self.pending_drafts[draft_id]
 
             # Check if draft has expired
             if datetime.now() > self.draft_timeouts[draft_id]:
@@ -238,12 +234,8 @@ class DraftApprovalHandler:
             result = self.gmail_writer.send_draft(draft)
 
             if result:
-                self._update_original_message(
-                    draft_id, "✅ *APPROVED & SENT*", "success"
-                )
-                say(
-                    text=f"✅ Email approved and sent successfully!\n*Message ID:* {result.get('id', 'N/A')}"
-                )
+                self._update_original_message(draft_id, "✅ *APPROVED & SENT*", "success")
+                say(text=f"✅ Email approved and sent successfully!\n*Message ID:* {result.get('id', 'N/A')}")
 
                 draft_data["status"] = "approved"
                 draft_data["approved_by"] = user_id
@@ -303,9 +295,7 @@ class DraftApprovalHandler:
             logging.exception("Error handling save request: %s", e)
             say(text="❌ An error occurred while processing save request.")
 
-    def _update_original_message(
-        self, draft_id: str, status_text: str, color: str
-    ) -> None:
+    def _update_original_message(self, draft_id: str, status_text: str, color: str) -> None:
         """Update the user with status message, removing original approval message and buttons
 
         parameters:
@@ -351,14 +341,3 @@ class DraftApprovalHandler:
             del self.pending_drafts[draft_id]
         if draft_id in self.draft_timeouts:
             del self.draft_timeouts[draft_id]
-
-
-def get_draft_handler(slack_app: App):
-    """Get or create the draft approval handler
-
-    parameters:
-        slack_app (App): Initialized Slack App instance
-    """
-    gmail_writer = GmailWriter(os.getenv("TOKENS_PATH"))
-    draft_handler = DraftApprovalHandler(gmail_writer=gmail_writer, slack_app=slack_app)
-    return draft_handler

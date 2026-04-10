@@ -52,7 +52,8 @@ class GmailWriter:
         attachment_path: Optional[str] = None,
     ) -> Optional[dict]:
         """
-        Create a draft email message dictionary given the sender, recipient, subject, message, and optional attachment path. Dictionary is in the format of {"raw": "base64_encoded_message"}.
+        Create a draft email message dictionary given the sender, recipient, subject, message,
+        and optional attachment path. Dictionary is in the format of {"raw": "base64_encoded_message"}.
 
         Args:
             sender (str): The email address of the sender.
@@ -124,10 +125,8 @@ class GmailWriter:
         Returns:
             dict: The sent message details.
         """
-        send_message = (
-            self.service.users().messages().send(userId="me", body=draft).execute()
-        )
-        print(f"Message issued successfully")
+        send_message = self.service.users().messages().send(userId="me", body=draft).execute()
+        print("Message issued successfully")
 
         return send_message
 
@@ -136,7 +135,10 @@ class GmailWriter:
         Send a reply to an original email message given the thread id.
 
         Args:
-            original_message (dict): The original email message dictionary in the format of {"payload": {"headers": [{"name": "From", "value": "sender@example.com"}, {"name": "Subject", "value": "Test Email"}, {"name": "Message-ID", "value": "1234567890"}, {"name": "To", "value": "recipient@example.com"}]}}.
+            original_message (dict): The original email message dictionary in the format of
+                {"payload": {"headers": [{"name": "From", "value": "sender@example.com"},
+                {"name": "Subject", "value": "Test Email"}, {"name": "Message-ID", "value": "1234567890"},
+                {"name": "To", "value": "recipient@example.com"}]}}.
             reply_message (str): The reply message body.
 
         Returns:
@@ -144,18 +146,10 @@ class GmailWriter:
         """
         # get headers
         headers = original_message["payload"]["headers"]
-        to_address = next(
-            header["value"] for header in headers if header["name"] == "From"
-        )
-        subject = next(
-            header["value"] for header in headers if header["name"] == "Subject"
-        )
-        message_id = next(
-            header["value"] for header in headers if header["name"] == "Message-ID"
-        )
-        my_email_address = next(
-            header["value"] for header in headers if header["name"] == "To"
-        )
+        to_address = next(header["value"] for header in headers if header["name"] == "From")
+        subject = next(header["value"] for header in headers if header["name"] == "Subject")
+        message_id = next(header["value"] for header in headers if header["name"] == "Message-ID")
+        my_email_address = next(header["value"] for header in headers if header["name"] == "To")
 
         # reply subject logic
         if not subject.startswith("Re:"):
@@ -177,12 +171,7 @@ class GmailWriter:
         raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
 
         try:
-            message = (
-                self.service.users()
-                .messages()
-                .send(userId="me", body=raw_message)
-                .execute()
-            )
+            message = self.service.users().messages().send(userId="me", body=raw_message).execute()
             print(f"Reply sent successfully! Message ID: {message['id']}")
             return message
 
@@ -203,12 +192,7 @@ class GmailWriter:
         try:
             create_draft = {"message": {"raw": draft["raw"]}}
 
-            saved_draft = (
-                self.service.users()
-                .drafts()
-                .create(userId="me", body=create_draft)
-                .execute()
-            )
+            saved_draft = self.service.users().drafts().create(userId="me", body=create_draft).execute()
             print(f"Draft saved successfully with ID: {saved_draft.get('id', 'N/A')}")
             return saved_draft
         except HttpError as error:
@@ -216,10 +200,12 @@ class GmailWriter:
             return None
 
     def _email_message_decoder(self, raw_str):
-        """Decodes a base64 encoded email draft dictionary and extracts its plain text body. Utilized by send_draft_slack.
+        """Decodes a base64 encoded email draft dictionary and extracts its plain text body.
+        Utilized by send_draft_slack.
 
         Args:
-            raw_str: A URL-safe base64 encoded string representing the raw email draft dictionary in the format of {"raw": "base64_encoded_message"}.
+            raw_str: A URL-safe base64 encoded string representing the raw email draft dictionary
+                in the format of {"raw": "base64_encoded_message"}.
 
         Returns:
             The plain text body of the email draft.

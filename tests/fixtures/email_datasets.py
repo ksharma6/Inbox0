@@ -3,7 +3,7 @@ Static synthetic email datasets used for testing workflows.
 - Each constant is a list of EmailMessage objects representing a specific email dataset.
 - Each dataset is named after the workflow it is used for.
 
-Datasets:   
+Datasets:
 - DEEP_THREAD_40: used for testing the EmailProcessingWorkflow.
     - 40 messages in a single thread with growing quoted-reply chains so that the body grows linearly with depth.
     - Matches the token-growth pattern described in ADR 001 and the demo hang.
@@ -11,7 +11,7 @@ Datasets:
     - 6 messages across 3 threads (2 per thread).
     - Multiple messages per thread_id trigger _detect_thread_duplication warnings.
 - EDGE_CASES: used for testing the EdgeCasesWorkflow.
-    - 3 messages covering boundary and error-prone input shapes: 
+    - 3 messages covering boundary and error-prone input shapes:
         - Empty body
         - Very long single-message body (~3 000 words, no quoted replies)
         - HTML artifact body — residual tags/entities not fully stripped
@@ -95,8 +95,7 @@ def _build_deep_thread() -> list[EmailMessage]:
             prev = messages[i - 1]
             quote = "\n".join(f"> {line}" for line in prev.body.splitlines())
             reply_text = (
-                f"Thanks for the update. See my comments below.\n\n"
-                f"On {prev.date}, {prev.from_email} wrote:\n{quote}"
+                f"Thanks for the update. See my comments below.\n\nOn {prev.date}, {prev.from_email} wrote:\n{quote}"
             )
             body = reply_text
             current_body = body

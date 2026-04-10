@@ -87,9 +87,7 @@ class GmailReader:
 
         return email_messages
 
-    def get_recent_emails_in_thread(
-        self, thread_id: str, count: int = 4
-    ) -> List[EmailMessage]:
+    def get_recent_emails_in_thread(self, thread_id: str, count: int = 4) -> List[EmailMessage]:
         """
         Get the most recent emails in thread specified by thread_id.
 
@@ -122,10 +120,7 @@ class GmailReader:
         try:
             if not message_detail:
                 message_detail = (
-                    self.service.users()
-                    .messages()
-                    .get(userId="me", id=message_id, format="full")
-                    .execute()
+                    self.service.users().messages().get(userId="me", id=message_id, format="full").execute()
                 )
 
             if not message_detail:

@@ -38,7 +38,6 @@ def workflow(mocker):
 
 
 class TestEdgeCaseFormatters:
-
     def test_formatter_handles_empty_body(self, workflow, edge_cases):
         """Empty body must produce a valid formatted string with a blank body line."""
         empty_email = next(e for e in edge_cases if e.id == "edge_empty_001")
@@ -58,12 +57,8 @@ class TestEdgeCaseFormatters:
         summary_output = workflow._format_emails_for_summary([long_email])
         analysis_output = workflow._format_emails_for_analysis([long_email])
 
-        assert (
-            long_email.body in summary_output
-        ), "Full body text must be present in summary formatter output"
-        assert (
-            long_email.body in analysis_output
-        ), "Full body text must be present in analysis formatter output"
+        assert long_email.body in summary_output, "Full body text must be present in summary formatter output"
+        assert long_email.body in analysis_output, "Full body text must be present in analysis formatter output"
 
     def test_formatter_preserves_html_artifacts(self, workflow, edge_cases):
         """HTML tags and entities must pass through verbatim without being stripped."""
@@ -73,9 +68,7 @@ class TestEdgeCaseFormatters:
         analysis_output = workflow._format_emails_for_analysis([html_email])
 
         for artifact in ["&amp;", "<b>", "<p>", "&copy;"]:
-            assert (
-                artifact in summary_output
-            ), f"Expected HTML artifact '{artifact}' to be preserved in summary output"
+            assert artifact in summary_output, f"Expected HTML artifact '{artifact}' to be preserved in summary output"
             assert (
                 artifact in analysis_output
             ), f"Expected HTML artifact '{artifact}' to be preserved in analysis output"

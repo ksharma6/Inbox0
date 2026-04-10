@@ -32,9 +32,7 @@ class AgentSchema(BaseModel):
         default_factory=get_default_model,
         description="Model to use (e.g. openai/gpt-4o-mini)",
     )
-    base_url: str = Field(
-        default_factory=get_default_base_url, description="API Base URL"
-    )
+    base_url: str = Field(default_factory=get_default_base_url, description="API Base URL")
     site_url: Optional[str] = Field(
         default=os.getenv("SITE_URL", "http://localhost:3000"),
         description="Site URL for OpenRouter rankings",
@@ -43,9 +41,7 @@ class AgentSchema(BaseModel):
         default=os.getenv("APP_NAME", "InboxZero"),
         description="App name for OpenRouter rankings",
     )
-    available_tools: Dict[str, Any] = Field(
-        default={}, description="Available tools for the agent"
-    )
+    available_tools: Dict[str, Any] = Field(default={}, description="Available tools for the agent")
 
 
 class ProcessRequestSchema(BaseModel):
@@ -53,9 +49,7 @@ class ProcessRequestSchema(BaseModel):
 
     user_prompt: str = Field(..., description="User's request prompt")
     llm_tool_schema: Any = Field(..., description="Tool schema for LLM")
-    system_message: Optional[str] = Field(
-        default=None, description="System message for the agent"
-    )
+    system_message: Optional[str] = Field(default=None, description="System message for the agent")
 
 
 class GmailAgentState(BaseModel):
@@ -66,53 +60,27 @@ class GmailAgentState(BaseModel):
     thread_id: str = Field(..., description="Unique ID for the email processing thread")
 
     # Email data
-    unread_emails: List[EmailMessage] = Field(
-        default=[], description="List of unread emails"
-    )
-    email_summary: Optional[EmailSummary] = Field(
-        default=None, description="Summary of emails"
-    )
+    unread_emails: List[EmailMessage] = Field(default=[], description="List of unread emails")
+    email_summary: Optional[EmailSummary] = Field(default=None, description="Summary of emails")
 
     # Processing state
-    current_email_index: int = Field(
-        default=0, description="Index of current email being processed"
-    )
-    processed_emails: List[Dict] = Field(
-        default=[], description="List of processed email results"
-    )
+    current_email_index: int = Field(default=0, description="Index of current email being processed")
+    processed_emails: List[Dict] = Field(default=[], description="List of processed email results")
 
     # Draft responses
-    draft_responses: List[Dict] = Field(
-        default=[], description="List of draft responses created"
-    )
-    pending_approvals: List[Dict] = Field(
-        default=[], description="Drafts pending Slack approval"
-    )
-    current_draft_index: int = Field(
-        default=0, description="Index of the draft currently being reviewed"
-    )
-    awaiting_approval: bool = Field(
-        default=False, description="Whether waiting for Slack approval"
-    )
+    draft_responses: List[Dict] = Field(default=[], description="List of draft responses created")
+    pending_approvals: List[Dict] = Field(default=[], description="Drafts pending Slack approval")
+    current_draft_index: int = Field(default=0, description="Index of the draft currently being reviewed")
+    awaiting_approval: bool = Field(default=False, description="Whether waiting for Slack approval")
     awaiting_approval_since: Optional[datetime.datetime] = Field(
         default=None, description="Time when waiting for approval started"
     )
-    current_draft_id: Optional[str] = Field(
-        default=None, description="ID of the current draft being reviewed"
-    )
+    current_draft_id: Optional[str] = Field(default=None, description="ID of the current draft being reviewed")
 
     # Workflow control
-    should_continue: bool = Field(
-        default=True, description="Whether to continue processing emails"
-    )
-    error_message: Optional[str] = Field(
-        default=None, description="Error message if any"
-    )
+    should_continue: bool = Field(default=True, description="Whether to continue processing emails")
+    error_message: Optional[str] = Field(default=None, description="Error message if any")
 
     # Final output
-    final_summary: Optional[str] = Field(
-        default=None, description="Final summary sent to user"
-    )
-    workflow_complete: bool = Field(
-        default=False, description="Whether workflow is complete"
-    )
+    final_summary: Optional[str] = Field(default=None, description="Final summary sent to user")
+    workflow_complete: bool = Field(default=False, description="Whether workflow is complete")

@@ -39,7 +39,6 @@ def workflow(mocker):
 
 
 class TestReadUnreadEmails:
-
     def _make_state(self):
         return GmailAgentState(user_id="test_user", thread_id="test_thread")
 
@@ -64,9 +63,7 @@ class TestReadUnreadEmails:
         workflow.gmail_reader.read_emails.return_value = per_thread
         workflow.gmail_reader.get_recent_emails_in_thread.side_effect = thread_emails
 
-    def test_deduplication_removes_overlap_between_fetch_and_thread_expansion(
-        self, workflow, multi_thread_inbox
-    ):
+    def test_deduplication_removes_overlap_between_fetch_and_thread_expansion(self, workflow, multi_thread_inbox):
         """
         Emails returned by read_emails that also appear in get_recent_emails_in_thread
         must not be counted twice in state.unread_emails.
@@ -87,9 +84,7 @@ class TestReadUnreadEmails:
 
         assert len(state.unread_emails) <= 5
 
-    def test_thread_expansion_preserves_multiple_emails_per_thread(
-        self, workflow, multi_thread_inbox
-    ):
+    def test_thread_expansion_preserves_multiple_emails_per_thread(self, workflow, multi_thread_inbox):
         """
         get_recent_emails_in_thread returns 2 emails per thread. After deduplication
         those pairs must be preserved in state.unread_emails — not collapsed to one.

@@ -7,10 +7,7 @@ from src.workflows.state_manager import (
 from src.workflows.workflow import EmailProcessingWorkflow
 
 
-def resume_workflow_after_action(
-    user_id: str, respond, workflow: EmailProcessingWorkflow
-):
-
+def resume_workflow_after_action(user_id: str, respond, workflow: EmailProcessingWorkflow):
     state = load_state_from_store(user_id)
     if state is None:
         return

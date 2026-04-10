@@ -33,12 +33,8 @@ def register_flask_routes(app, workflow):
                 state = GmailAgentState(**actual_state)
 
             # Check for pause condition
-            if (
-                state.awaiting_approval
-            ):  # Check if workflow is waiting for human approval
-                save_state_to_store(
-                    state
-                )  # Save the current state to persistent storage so it can be resumed later
+            if state.awaiting_approval:  # Check if workflow is waiting for human approval
+                save_state_to_store(state)  # Save the current state to persistent storage so it can be resumed later
                 return jsonify(
                     {"status": "paused", "awaiting_approval": True}
                 )  # Return HTTP response indicating workflow is paused
@@ -71,10 +67,7 @@ def register_flask_routes(app, workflow):
             print(f"User approved draft {state.current_draft_index - 1}")
         elif action == "reject_draft":
             # Use the draft handler to reject the draft
-            if state.draft_responses and state.current_draft_index < len(
-                state.draft_responses
-            ):
-                draft_info = state.draft_responses[state.current_draft_index]
+            if state.draft_responses and state.current_draft_index < len(state.draft_responses):
                 # The DraftApprovalHandler will handle the rejection logic
                 print(f"User rejected draft {state.current_draft_index}")
             state.current_draft_index += 1
@@ -95,6 +88,4 @@ def register_flask_routes(app, workflow):
                 new_state = GmailAgentState(**actual_state)
             final_state = new_state
         save_state_to_store(final_state)
-        return jsonify(
-            {"status": "resumed", "workflow_complete": final_state.workflow_complete}
-        )
+        return jsonify({"status": "resumed", "workflow_complete": final_state.workflow_complete})

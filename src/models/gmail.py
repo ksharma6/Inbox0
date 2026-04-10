@@ -29,9 +29,7 @@ class EmailMessage(BaseModel):
     date: str = Field(..., description="Email date as string")
     body: str = Field(..., description="Cleaned email body content")
     is_read: bool = Field(default=False, description="Whether the email has been read")
-    is_important: bool = Field(
-        default=False, description="Whether the email is marked as important"
-    )
+    is_important: bool = Field(default=False, description="Whether the email is marked as important")
     thread_id: str = Field(..., description="Gmail thread ID")
 
 
@@ -41,9 +39,7 @@ class EmailSummary(BaseModel):
     total_unread: int = Field(..., description="Total number of unread emails")
     emails: List[EmailMessage] = Field(..., description="List of email messages")
     summary_by_sender: dict = Field(..., description="Summary grouped by sender")
-    urgent_emails: List[EmailMessage] = Field(
-        ..., description="Emails marked as urgent or important"
-    )
+    urgent_emails: List[EmailMessage] = Field(..., description="Emails marked as urgent or important")
     recent_activity: str = Field(..., description="Summary of recent email activity")
 
 
@@ -59,7 +55,10 @@ class GmailReaderToolFunction:
         """
         return ToolFunction(
             name="read_emails",
-            description="Read and retrieve the most recent emails from Gmail inbox. Returns formatted email data including subject, sender, date, and body content.",
+            description=(
+                "Read and retrieve the most recent emails from Gmail inbox. "
+                "Returns formatted email data including subject, sender, date, and body content."
+            ),
             parameters=ToolParams(
                 type="object",
                 properties={
@@ -117,7 +116,9 @@ class GmailReaderToolFunction:
                 properties={
                     "query": ParamProperties(
                         type="string",
-                        description="Gmail search query (e.g., 'from:example@gmail.com', 'subject:meeting', 'is:unread')",
+                        description=(
+                            "Gmail search query (e.g., 'from:example@gmail.com', 'subject:meeting', 'is:unread')"
+                        ),
                     ),
                     "max_results": ParamProperties(
                         type="integer",
@@ -150,21 +151,11 @@ class GmailToolFunction:
             parameters=ToolParams(
                 type="object",
                 properties={
-                    "sender": ParamProperties(
-                        type="string", description="The sender's email address."
-                    ),
-                    "recipient": ParamProperties(
-                        type="string", description="The recipient's email address."
-                    ),
-                    "subject": ParamProperties(
-                        type="string", description="The subject of the email."
-                    ),
-                    "message": ParamProperties(
-                        type="string", description="The main content of the email."
-                    ),
-                    "attachment_path": ParamProperties(
-                        type="string", description="Path to attachment - Optional"
-                    ),
+                    "sender": ParamProperties(type="string", description="The sender's email address."),
+                    "recipient": ParamProperties(type="string", description="The recipient's email address."),
+                    "subject": ParamProperties(type="string", description="The subject of the email."),
+                    "message": ParamProperties(type="string", description="The main content of the email."),
+                    "attachment_path": ParamProperties(type="string", description="Path to attachment - Optional"),
                 },
                 required=[
                     "sender",
@@ -182,25 +173,18 @@ class GmailToolFunction:
         """
         return ToolFunction(
             name="create_draft",
-            description="Creates an email draft with sender, recipient, subject, message, and optional attachment. Use this FIRST before sending to Slack.",
+            description=(
+                "Creates an email draft with sender, recipient, subject, message, and optional attachment. "
+                "Use this FIRST before sending to Slack."
+            ),
             parameters=ToolParams(
                 type="object",
                 properties={
-                    "sender": ParamProperties(
-                        type="string", description="The sender's email address."
-                    ),
-                    "recipient": ParamProperties(
-                        type="string", description="The recipient's email address."
-                    ),
-                    "subject": ParamProperties(
-                        type="string", description="The subject of the email."
-                    ),
-                    "message": ParamProperties(
-                        type="string", description="The main content of the email."
-                    ),
-                    "attachment_path": ParamProperties(
-                        type="string", description="Path to attachment - Optional"
-                    ),
+                    "sender": ParamProperties(type="string", description="The sender's email address."),
+                    "recipient": ParamProperties(type="string", description="The recipient's email address."),
+                    "subject": ParamProperties(type="string", description="The subject of the email."),
+                    "message": ParamProperties(type="string", description="The main content of the email."),
+                    "attachment_path": ParamProperties(type="string", description="Path to attachment - Optional"),
                 },
                 required=["sender", "recipient", "subject", "message"],
             ),

@@ -22,9 +22,7 @@ def test_register_slack_routes(caplog, mocker):
 
     mock_handler = MagicMock()
     mock_handler.handle.return_value = ("", 200)
-    with patch(
-        "slack_bolt.adapter.flask.SlackRequestHandler", return_value=mock_handler
-    ):
+    with patch("slack_bolt.adapter.flask.SlackRequestHandler", return_value=mock_handler):
         with caplog.at_level(logging.INFO):
             client.post(
                 "/slack/events",
