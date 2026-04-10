@@ -1,6 +1,15 @@
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+REQUIRED_VARS = [
+    "OPENROUTER_API_KEY",
+    "LANGSMITH_API_KEY",
+    "SLACK_BOT_TOKEN",
+    "SLACK_SIGNING_SECRET",
+    "TOKENS_PATH",
+]
 
 
 def load_dotenv_helper():
@@ -15,3 +24,10 @@ def load_dotenv_helper():
             print(f"Loaded .env from CWD: {project_root_env_alt}")
         else:
             print("Warning: .env file not found via default search or in CWD.")
+
+    missing = [var for var in REQUIRED_VARS if not os.getenv(var)]
+    if missing:
+        raise RuntimeError(
+            f"Missing required environment variables: {', '.join(missing)}\n"
+            "Please check your .env file against .env.example."
+        )
