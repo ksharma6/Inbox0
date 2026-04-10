@@ -7,7 +7,8 @@
   <!-- <a href="https://codecov.io/gh/ksharma6/Inbox0"><img src="https://codecov.io/gh/ksharma6/Inbox0/branch/main/graph/badge.svg" alt="Coverage"></a> -->
   <a href="https://python.org"><img src="https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=yellow" alt="Python"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-2A5F4F" alt="License"></a>
-  <a href="https://langchain-ai.github.io/langgraph/"><img src="https://img.shields.io/badge/Built%20with-LangGraph-7C3AED" alt="LangGraph"></a>
+  <a href="https://langchain-ai.github.io/langgraph/"><img src="https://img.shields.io/badge/Built%20with-LangGraph-7C3AED?logo=graphql&logoColor=white" alt="LangGraph"></a>
+  <a href="https://smith.langchain.com"><img src="https://img.shields.io/badge/LangSmith-Tracing-FFA500?logo=langchain&logoColor=white" alt="LangSmith"></a>
   <a href="https://slack.com"><img src="https://img.shields.io/badge/Slack-Integrated-4A154B?logo=slack&logoColor=white" alt="Slack"></a>
   <a href="https://openrouter.ai"><img src="https://img.shields.io/badge/OpenRouter-Compatible-FF6B35?logo=openai&logoColor=white" alt="OpenRouter"></a>
   <a href="https://gmail.com"><img src="https://img.shields.io/badge/Gmail-API-white?logo=gmail&logoColor=EA4335" alt="Gmail"></a>
@@ -15,7 +16,7 @@
 
 ## Inbox0 — AI Email Assistant
 
-An AI assistant that reads your Gmail, summarizes your day’s to‑dos, and drafts responses for human review in Slack. Runs a Flask server with Slack actions and a LangGraph workflow that orchestrates Gmail + OpenAI. At this time, the project only supports calls to OpenAI's API. 
+An AI assistant that reads your Gmail, summarizes your day’s to‑dos, and drafts responses for human review in Slack. Runs a Flask server with Slack actions and a LangGraph workflow that orchestrates Gmail + OpenRouter. Compatible with OpenRouter and any OpenAI SDK-compatible provider.
 
 ## Features
 
@@ -92,6 +93,7 @@ uv sync --group dev
 OPENROUTER_API_KEY=your-api-key          # or your provider's API key
 OPENROUTER_MODEL=openai/gpt-4o           # any OpenRouter or OpenAI SDK-compatible model
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1  # override for other providers
+LANGSMITH_API_KEY=your-langsmith-api-key # from https://smith.langchain.com — used for LangGraph tracing
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_SIGNING_SECRET=...
 # Absolute path to the tokens folder that contains Gmail OAuth files (must end with a trailing slash)
@@ -136,6 +138,7 @@ Slack endpoints used by the app
 - `.env` is loaded at runtime. Ensure it exists at the project root before starting the app.
 - `TOKENS_PATH` must be an absolute path and end with a trailing slash. It should contain `credentials.json` and will be where `token.json` is created.
 - The Flask server defaults to port `5002`.
+- `LANGSMITH_API_KEY` enables LangGraph tracing via [LangSmith](https://smith.langchain.com). Create a free account, generate an API key, and set `LANGCHAIN_TRACING_V2=true` in your `.env` to activate tracing.
 
 ### Project structure (high level)
 
@@ -222,6 +225,7 @@ curl -X POST http://localhost:5002/resume_workflow \
 - Gmail errors: confirm `credentials.json` exists at `TOKENS_PATH` and re‑run to regenerate `token.json` if needed
 - No .env loaded: ensure `.env` exists at project root and environment variable keys are set before `python main.py`
 - `TOKENS_PATH` must end with `/` so the app finds `token.json` and `credentials.json`
+- Missing `LANGSMITH_API_KEY`: create a free account at [smith.langchain.com](https://smith.langchain.com), generate an API key under Settings, and add it to `.env`
 
 ### Security
 
