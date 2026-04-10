@@ -142,3 +142,34 @@ The `thread_id` parameter in `read_emails` must be wired up to the Gmail API que
 # gmail_reader.py — proposed fix (not yet applied)
 if thread_id:
     query_parts.append(f"threadId:{thread_id}")
+
+### Results
+The hypothesis understated the problem. Token growth is not linear — it is
+exponential, driven by the quoted-reply structure of real email threads. Each
+message re-embeds the full content of all prior messages, producing a prompt
+that grows as O(2^N) with thread depth rather than O(N).
+
+| Step | Tokens | Growth factor |
+|---|---|---|
+| depth 5 | 739 | baseline |
+| depth 10 | 2,529 | **3.4×** |
+| depth 20 | 10,759 | **4.3×** |
+| depth 40 | 56,319 | **5.2×** |
+
+At depth 40, the prompt reaches **56k tokens** before any LLM call is made.
+At current OpenRouter pricing for GPT-4o (~$5/1M input tokens), a single
+workflow run on this thread costs ~$0.28 in input tokens alone and repeats
+that cost in full on every subsequent trigger, since nothing is cached.
+
+The message-level cache described in this ADR directly addresses the
+compounding mechanism: once a message has been processed and summarised, it
+is never re-embedded. The prompt for a new reply becomes:
+- Thread summary (cached, ~200 tokens)
+- New message (1 reply, ~50–300 tokens)
+
+**Implementation is no longer optional.** The exponential growth rate means
+that production inboxes with active threads will hit model context limits
+(128k tokens for GPT-4o) at thread depths reachable within a single working
+day of back-and-forth.
+
+Raw measurements: [`reports/adr001_token_growth.csv`](../../reports/adr001_token_growth.csv)
