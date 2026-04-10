@@ -28,11 +28,12 @@ A clear and concise description of what you have implemented.
 <!-- It is considered good practice to add tests with newly added code to enforce the fact that the code actually works. This will reduce the chance of introducing logical bugs. -->
 
 #### PR checklist
-- [ ] The PR title starts with either [ENH], [MNT], [DOC], or [BUG]
+- [ ] The PR title starts with either [ENH], [MNT], [DOC], [BUG], or [SEC]
     - [BUG] - bugfix
-    - [MNT] - CI, test framework
+    - [MNT] - CI, test framework, dependency updates
     - [ENH] - adding or improving code
     - [DOC] - writing or improving documentation or docstrings
+    - [SEC] - security fixes or vulnerability patches
 - [ ] Tests added or updated for any changed behaviour
 - [ ] No secrets, credentials, or `.env` values committed
-- [ ] `requirements.txt` updated if new dependencies were added
+- [ ] `pyproject.toml` updated if new dependencies were added and `uv.lock` regenerated via `uv sync`
