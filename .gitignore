@@ -22,6 +22,7 @@ reports/latest_*
 coverage.xml
 junit.xml
 .coverage
+usage_tracker.json
 planning/
 
 # Jupyter Notebook checkpoints
