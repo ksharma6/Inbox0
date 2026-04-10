@@ -19,6 +19,7 @@ tokens/
 reports/*.html
 reports/*.xml
 reports/latest_*
+planning/
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints
