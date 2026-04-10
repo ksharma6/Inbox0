@@ -69,9 +69,9 @@ class TestEdgeCaseFormatters:
 
         for artifact in ["&amp;", "<b>", "<p>", "&copy;"]:
             assert artifact in summary_output, f"Expected HTML artifact '{artifact}' to be preserved in summary output"
-            assert (
-                artifact in analysis_output
-            ), f"Expected HTML artifact '{artifact}' to be preserved in analysis output"
+            assert artifact in analysis_output, (
+                f"Expected HTML artifact '{artifact}' to be preserved in analysis output"
+            )
 
     def test_all_edge_cases_format_without_raising(self, workflow, edge_cases):
         """All three edge case emails must pass through both formatters without raising."""

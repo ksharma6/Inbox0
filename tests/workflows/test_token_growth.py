@@ -86,12 +86,12 @@ class TestTokenGrowth:
         rows = self._measure(workflow, emails_by_depth)
         counts = {r["depth"]: r["tokens"] for r in rows}
 
-        assert (
-            counts[20] >= counts[10] * 2
-        ), f"Expected at least 2x growth from depth 10 to 20: {counts[10]} -> {counts[20]}"
-        assert (
-            counts[40] >= counts[20] * 2
-        ), f"Expected at least 2x growth from depth 20 to 40: {counts[20]} -> {counts[40]}"
+        assert counts[20] >= counts[10] * 2, (
+            f"Expected at least 2x growth from depth 10 to 20: {counts[10]} -> {counts[20]}"
+        )
+        assert counts[40] >= counts[20] * 2, (
+            f"Expected at least 2x growth from depth 20 to 40: {counts[20]} -> {counts[40]}"
+        )
 
     def test_writes_results_to_csv(self, workflow, deep_thread_40):
         """Persist token measurements to reports/ for review alongside ADR 001."""
