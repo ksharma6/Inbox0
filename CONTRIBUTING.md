@@ -38,7 +38,7 @@ Thank you for your interest in contributing! This document covers how to get set
 
 ## Reporting bugs or requesting features
 
-Open an issue at [github.com/ksharma6/inbox_zero/issues](https://github.com/ksharma6/inbox_zero/issues) and provide as much context as possible.
+Open an issue at [github.com/ksharma6/Inbox0/issues](https://github.com/ksharma6/Inbox0/issues) and provide as much context as possible.
 
 ## Code of Conduct
 
