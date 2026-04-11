@@ -40,7 +40,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Fixed Codecov unknown status — upgraded action to v5 and added `codecov.yml` ([#53](https://github.com/ksharma6/Inbox0/pull/53))
 - GitHub and CI maintenance ([#52](https://github.com/ksharma6/Inbox0/pull/52))
 - Updated pre-commit configuration and CI workflow to target Python 3.11 ([#40](https://github.com/ksharma6/Inbox0/pull/40))
-- Removed stale `inbox_zero` dependency from `requirements.txt` ([#39](https://github.com/ksharma6/Inbox0/pull/39))
+- Removed stale `Inbox0` dependency from `requirements.txt` ([#39](https://github.com/ksharma6/Inbox0/pull/39))
 
 ### Dependencies
 - Bumped `openai` 2.17.0 → 2.30.0 ([#46](https://github.com/ksharma6/Inbox0/pull/46))
