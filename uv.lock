@@ -723,7 +723,7 @@ wheels = [
 ]
 
 [[package]]
-name = "inbox-zero"
+name = "inbox0"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
@@ -756,7 +756,7 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.14" },
     { name = "flask", specifier = ">=3.1" },
-    { name = "google-api-python-client", specifier = ">=2.0" },
+    { name = "google-api-python-client", specifier = ">=2.194.0" },
     { name = "google-auth-oauthlib", specifier = ">=1.3" },
     { name = "langchain", specifier = ">=1.2" },
     { name = "openai", specifier = ">=2.0" },
