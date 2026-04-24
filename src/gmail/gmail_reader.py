@@ -1,4 +1,5 @@
 import base64
+import logging
 from typing import Dict, List, Optional
 
 from bs4 import BeautifulSoup
@@ -128,6 +129,10 @@ class GmailReader:
 
             payload = message_detail.get("payload")
             if not payload:
+                logging.warning(
+                    "[GMAIL_PAYLOAD_MISSING] message_id=%s skipping (no payload in API response)",
+                    message_id,
+                )
                 return None
 
             headers = payload.get("headers", [])
@@ -161,7 +166,7 @@ class GmailReader:
             )
 
         except Exception as e:
-            print(f"Error processing email {message_id}: {e}")
+            logging.exception("[GMAIL_FETCH_ERROR] message_id=%s error=%s", message_id, e)
             return None
 
     def _get_header(self, headers: list, name: str):
@@ -221,8 +226,12 @@ class GmailReader:
 
         body = ""
 
-        if "parts" in payload:
-            for part in payload["parts"]:
+        if not payload:
+            return body
+
+        parts = payload.get("parts")
+        if parts:
+            for part in parts:
                 # recursive call for each part in payload
                 body += self._get_email_body(part)
         # base case - part w/ body
