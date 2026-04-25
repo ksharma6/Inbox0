@@ -2,7 +2,7 @@ import datetime
 import os
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from src.models.gmail import EmailMessage, EmailSummary
 
 
@@ -38,10 +38,17 @@ class AgentSchema(BaseModel):
         description="Site URL for OpenRouter rankings",
     )
     app_name: Optional[str] = Field(
-        default=os.getenv("APP_NAME", "InboxZero"),
+        default=os.getenv("APP_NAME", "Inbox0"),
         description="App name for OpenRouter rankings",
     )
     available_tools: Dict[str, Any] = Field(default={}, description="Available tools for the agent")
+
+    @field_validator("api_key", mode="before")
+    @classmethod
+    def api_key_must_be_set(cls, v: Any) -> str:
+        if not v:
+            raise ValueError("No API key found. Set OPENROUTER_API_KEY or OPENAI_API_KEY.")
+        return v
 
 
 class ProcessRequestSchema(BaseModel):
