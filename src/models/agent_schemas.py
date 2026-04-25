@@ -26,6 +26,7 @@ class AgentSchema(BaseModel):
 
     api_key: str = Field(
         default_factory=get_default_api_key,
+        validate_default=True,
         description="API key (OpenRouter or OpenAI)",
     )
     model: str = Field(
@@ -46,7 +47,7 @@ class AgentSchema(BaseModel):
     @field_validator("api_key", mode="before")
     @classmethod
     def api_key_must_be_set(cls, v: Any) -> str:
-        if not v:
+        if not v or not v.strip():
             raise ValueError("No API key found. Set OPENROUTER_API_KEY or OPENAI_API_KEY.")
         return v
 
