@@ -10,7 +10,7 @@ token.json
 .inbox_zero.egg-info/
 .venv/
 demos/
-inbox_zero.egg-info/
+Inbox0.egg-info
 logs/
 template.txt
 tokens/

@@ -30,7 +30,11 @@ class EmailMessage(BaseModel):
     body: str = Field(..., description="Cleaned email body content")
     is_read: bool = Field(default=False, description="Whether the email has been read")
     is_important: bool = Field(default=False, description="Whether the email is marked as important")
-    thread_id: str = Field(..., description="Gmail thread ID")
+    thread_id: str = Field(
+        ...,
+        min_length=1,
+        description="Gmail thread ID (must be non-empty)",
+    )
 
 
 class EmailSummary(BaseModel):
