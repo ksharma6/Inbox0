@@ -7,7 +7,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [0.1.1] — 2026-04-25
+
+### Added
+- Fail-fast Pydantic validation at external boundaries: Flask workflow requests, Slack action payloads, Gmail message parsing, and `AgentSchema` API-key configuration ([#71](https://github.com/ksharma6/Inbox0/pull/71))
+- Retry logic for transient OpenAI/OpenRouter-compatible LLM failures and Gmail read API failures using exponential backoff.
+- Focused tests for schema validation, environment-variable fallback behavior, Gmail malformed-response handling, and retry behavior.
+
+### Changed
+- Aligned environment loading and workflow construction with `AgentSchema`, including support for either `OPENROUTER_API_KEY` or `OPENAI_API_KEY` ([#71](https://github.com/ksharma6/Inbox0/pull/71))
+- Updated `src/workflows/factory.py` to construct the workflow through `Agent`/`AgentSchema` instead of a raw `OpenRouter` client ([#71](https://github.com/ksharma6/Inbox0/pull/71))
+
+### Maintenance
+- Updated CI to use `actions/checkout@v5` and `codecov/codecov-action@v5` for both coverage and test-result uploads ([#71](https://github.com/ksharma6/Inbox0/pull/71))
+- Updated `pip-audit` CI behavior to ignore the currently unactionable `pip` CVE while preserving audit enforcement for other vulnerabilities ([#71](https://github.com/ksharma6/Inbox0/pull/71))
+
+### Dependencies
+- Bumped `langsmith` 0.7.30 → 0.7.36 ([#71](https://github.com/ksharma6/Inbox0/pull/71))
+- Added `tenacity` as a direct dependency for retry handling.
 
 ---
 
