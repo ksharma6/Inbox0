@@ -4,13 +4,14 @@ import time
 from typing import Callable, Dict
 
 import tiktoken
-from openai import OpenAI
+from openai import APIConnectionError, APITimeoutError, InternalServerError, OpenAI, RateLimitError
 from openai.types.chat import ChatCompletion
 from src.gmail.gmail_reader import GmailReader
 from src.gmail.gmail_writer import GmailWriter
 from src.models.agent_schemas import AgentSchema, ProcessRequestSchema
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
 from src.utils.usage_tracker import UsageTracker
+from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,6 @@ class Agent:
                 "X-Title": schema.app_name,
             },
         )
-        # Map available tools to their methods
         self._setup_function_map()
 
     def _setup_function_map(self):
@@ -46,16 +46,13 @@ class Agent:
             return
         for tool_name, instance in self.available_tools.items():
             if isinstance(instance, GmailWriter):
-                # Map GmailWriter methods to function names
                 self.function_map["create_draft"] = instance.create_draft
                 self.function_map["send_draft"] = instance.send_draft
                 self.function_map["save_draft"] = instance.save_draft
                 self.function_map["send_reply"] = instance.send_reply
             elif isinstance(instance, GmailReader):
-                # Map GmailReader methods to function names
                 self.function_map["read_emails"] = instance.read_emails
             elif isinstance(instance, DraftApprovalHandler):
-                # Map DraftApprovalHandler methods to function names
                 self.function_map["send_draft_for_approval"] = instance.send_draft_for_approval
             else:
                 logger.error(f"Unknown tool type: {type(instance)} for tool: {tool_name}")
@@ -78,6 +75,17 @@ class Agent:
                 total += len(encoding.encode(content))
         return total
 
+    @retry(
+        retry=retry_if_exception_type((APIConnectionError, APITimeoutError, RateLimitError, InternalServerError)),
+        wait=wait_exponential(multiplier=1, min=1, max=8),
+        stop=stop_after_attempt(3),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    def _create_chat_completion(self, **kwargs) -> ChatCompletion:
+        """Retry transient OpenAI/OpenRouter-compatible completion failures."""
+        return self.client.chat.completions.create(**kwargs)
+
     def _timed_completion(self, label: str, **kwargs) -> ChatCompletion:
         """Wraps chat.completions.create with pre-flight token estimation and duration logging"""
         est_tokens = self._estimate_prompt_tokens(kwargs.get("messages", []))
@@ -91,7 +99,7 @@ class Agent:
             },
         )
         t0 = time.perf_counter()
-        response = self.client.chat.completions.create(**kwargs)
+        response = self._create_chat_completion(**kwargs)
         elapsed_ms = (time.perf_counter() - t0) * 1000
         usage = response.usage
         tps = (usage.completion_tokens / (elapsed_ms / 1000)) if elapsed_ms > 0 else 0
@@ -117,7 +125,7 @@ class Agent:
         return response
 
     def process_request(self, schema: ProcessRequestSchema, max_iterations: int = 5):
-        """Processes user's request by interacting with OpenAI model.
+        """Processes user's request by interacting with OpenRouter model.
 
         Args:
             schema (ProcessRequestSchema): Request schema containing user prompt, tool schema, and system message
@@ -139,7 +147,7 @@ class Agent:
 
         logger.info("Messages: %s", messages)
 
-        # Convert tool schema(s) to proper OpenAI format
+        # Convert tool schema(s) to proper OpenRouter format
         # Handle both single ToolFunction and list of ToolFunctions
         tools_payload = None  # Default to None
         if schema.llm_tool_schema:  # Only process if not None
@@ -190,11 +198,9 @@ class Agent:
                     function_to_call = self.function_map.get(function_name)
 
                     if function_to_call:
-                        # Handle missing keys in function_args if they are optional
                         try:
                             function_args = json.loads(function_args_str)
 
-                            # Special handling for Slack functions that need draft
                             if function_name in ["send_draft_for_approval"]:
                                 if "draft" not in function_args or not function_args["draft"]:
                                     result = (
@@ -215,8 +221,7 @@ class Agent:
                                 f"Error decoding arguments for {function_name}. "
                                 "Trying to call without arguments or with defaults."
                             )
-                            # Attempt to call with no args if appropriate, or handle default
-                            if function_name == "read_emails":  # Example: read_emails might default
+                            if function_name == "read_emails":
                                 result = function_to_call()
                             else:
                                 result = f"Error: Invalid arguments for {function_name}."
@@ -227,7 +232,7 @@ class Agent:
                                 "tool_call_id": tool_call.id,
                                 "role": "tool",
                                 "name": function_name,
-                                "content": str(result),  # Ensure content is a string
+                                "content": str(result),
                             }
                         )
                     else:
@@ -242,17 +247,13 @@ class Agent:
                                      {list(self.function_map.keys())}",
                             }
                         )
-
-                # Continue to next iteration for more tool calls
                 iteration += 1
 
             else:
-                # No more tool calls, get final response
                 final_response = response_message.content
                 logger.info("Agent final response (no more tools needed):\n%s", final_response)
                 return final_response
 
-        # If we reach max iterations, get a final response
         logger.info("Reached maximum iterations (%s). Getting final response...", max_iterations)
         final_response_obj = self._timed_completion("final_max_iterations", model=self.schema.model, messages=messages)
         final_response = final_response_obj.choices[0].message.content
