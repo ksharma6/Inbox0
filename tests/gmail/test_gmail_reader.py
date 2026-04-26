@@ -14,11 +14,14 @@ Covers the defensive changes in ``src/gmail/gmail_reader.py`` and
 
 import base64
 import logging
+from unittest.mock import Mock
 
 import pytest
+from googleapiclient.errors import HttpError
 from pydantic import ValidationError
 from src.gmail.gmail_reader import GmailReader
 from src.models.gmail import EmailMessage
+from tenacity import wait_none
 
 VALID_THREAD_ID = "thread_abc123"
 
@@ -101,6 +104,20 @@ class TestGetEmailMessagePayloadGuard:
 
         assert result is None
         assert any("[GMAIL_PAYLOAD_MISSING]" in r.getMessage() for r in caplog.records)
+
+
+class TestGmailReaderRetry:
+    """Gmail read requests retry transient API failures."""
+
+    def test_execute_read_request_retries_transient_http_error(self, reader):
+        transient_error = HttpError(resp=Mock(status=500, reason="server error"), content=b"temporary failure")
+        request = Mock()
+        request.execute.side_effect = [transient_error, {"messages": []}]
+
+        result = reader._execute_read_request.retry_with(wait=wait_none())(reader, request)
+
+        assert result == {"messages": []}
+        assert request.execute.call_count == 2
 
 
 class TestGetEmailMessageExceptionLogging:

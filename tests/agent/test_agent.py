@@ -1,11 +1,14 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+import httpx
+from openai import APIConnectionError
 from src.agent.agent import Agent
 from src.gmail.gmail_reader import GmailReader
 from src.gmail.gmail_writer import GmailWriter
 from src.models.agent_schemas import AgentSchema
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
+from tenacity import wait_none
 
 
 class TestAgent(unittest.TestCase):
@@ -51,3 +54,23 @@ class TestAgent(unittest.TestCase):
             self.agent.function_map["send_draft_for_approval"],
             self.mock_draft_approval_handler.send_draft_for_approval,
         )
+
+    def test_create_chat_completion_retries_transient_failure(self):
+        """Transient OpenAI/OpenRouter-compatible errors are retried."""
+        expected_response = MagicMock()
+        transient_error = APIConnectionError(
+            message="temporary connection failure",
+            request=httpx.Request("POST", "https://example.test/v1/chat/completions"),
+        )
+        self.agent.client = MagicMock()
+        create = self.agent.client.chat.completions.create
+        create.side_effect = [transient_error, expected_response]
+
+        result = self.agent._create_chat_completion.retry_with(wait=wait_none())(
+            self.agent,
+            model="test-model",
+            messages=[{"role": "user", "content": "hello"}],
+        )
+
+        self.assertEqual(result, expected_response)
+        self.assertEqual(create.call_count, 2)

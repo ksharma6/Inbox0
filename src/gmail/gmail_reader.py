@@ -4,9 +4,21 @@ from typing import Dict, List, Optional
 
 from bs4 import BeautifulSoup
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from src.models.gmail import EmailMessage
+from tenacity import before_sleep_log, retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from .gmail_authenticator import auth_user
+
+logger = logging.getLogger(__name__)
+
+
+def _is_transient_gmail_error(exc: BaseException) -> bool:
+    """Return True for Gmail API errors that are safe to retry for read calls."""
+    if isinstance(exc, HttpError):
+        status = getattr(exc.resp, "status", None)
+        return status == 429 or (status is not None and 500 <= status < 600)
+    return isinstance(exc, (ConnectionError, TimeoutError))
 
 
 class GmailReader:
@@ -34,6 +46,17 @@ class GmailReader:
         self.path = path
         self.creds = auth_user(self.path)
         self.service = build("gmail", "v1", credentials=self.creds)
+
+    @retry(
+        retry=retry_if_exception(_is_transient_gmail_error),
+        wait=wait_exponential(multiplier=1, min=1, max=8),
+        stop=stop_after_attempt(3),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    def _execute_read_request(self, request):
+        """Execute a Gmail read request with retry for transient API failures."""
+        return request.execute()
 
     def read_emails(
         self,
@@ -73,7 +96,7 @@ class GmailReader:
         # list of user's messages - capped at 25 messages
         list_params = {"userId": "me", "maxResults": min(count, 25), "q": query}
 
-        results = self.service.users().messages().list(**list_params).execute()
+        results = self._execute_read_request(self.service.users().messages().list(**list_params))
         messages = results.get("messages", [])
 
         if not messages:
@@ -120,8 +143,8 @@ class GmailReader:
         """
         try:
             if not message_detail:
-                message_detail = (
-                    self.service.users().messages().get(userId="me", id=message_id, format="full").execute()
+                message_detail = self._execute_read_request(
+                    self.service.users().messages().get(userId="me", id=message_id, format="full")
                 )
 
             if not message_detail:
