@@ -33,7 +33,7 @@ dev = [
     "pytest-cov>=5.0",
     "pip-audit>=2.7",
     "ruff>=0.4",
-    "pre-commit>=4.5",
+    "pre-commit>=4.6.0",
 ]
 
 [tool.setuptools.packages.find]
