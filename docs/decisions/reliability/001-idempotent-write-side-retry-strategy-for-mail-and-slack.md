@@ -1,4 +1,4 @@
-# 004 — Idempotent Write-Side Retry Strategy for Gmail and Slack
+# 001 — Idempotent Write-Side Retry Strategy for Gmail and Slack
 
 **Status:** Proposed  
 **Date:** 2026-04-25  
@@ -35,9 +35,9 @@ The first implementation should be experimental. The output should be a measured
 
 ---
 
-## Relationship to ADR 003
+## Relationship to email-processing/002
 
-ADR 003 proposes building an email classification dataset to decide whether a lightweight classifier can replace some LLM response-required decisions.
+[email-processing/002](../email-processing/002-email-response-classification.md) proposes building an email classification dataset to decide whether a lightweight classifier can replace some LLM response-required decisions.
 
 This ADR should reuse that dataset work instead of creating a separate corpus from scratch. The same `EmailMessage` fixtures can support both efforts if they include enough metadata:
 
@@ -56,7 +56,7 @@ class EmailScenario:
     expected_subject: str
 ```
 
-ADR 003 cares about whether a draft is warranted. This ADR cares about what happens after a draft or user action is attempted. The overlap is the email/thread fixture itself.
+[email-processing/002](../email-processing/002-email-response-classification.md) cares about whether a draft is warranted. This ADR cares about what happens after a draft or user action is attempted. The overlap is the email/thread fixture itself.
 
 Recommended shared fixture layout:
 
@@ -106,7 +106,7 @@ The dataset should include:
 | Save action | Should preserve draft without treating it as approved |
 | Delayed Gmail consistency | Draft/Sent search may not show the side effect immediately |
 
-The 30-scenario dataset can be synthetic at first. Use the ADR 003 category distribution as a base, then annotate scenarios with write-side expectations.
+The 30-scenario dataset can be synthetic at first. Use the [email-processing/002](../email-processing/002-email-response-classification.md) category distribution as a base, then annotate scenarios with write-side expectations.
 
 ---
 
@@ -274,7 +274,7 @@ Recommended near-term decision:
 
 1. Do not add Tenacity retries to GmailWriter or Slack send/action methods yet.
 2. Add read/LLM retries only, which are already safe and implemented separately.
-3. Build a mocked idempotency experiment using the shared ADR 003 email scenarios.
+3. Build a mocked idempotency experiment using the shared [email-processing/002](../email-processing/002-email-response-classification.md) email scenarios.
 4. Implement the lowest-risk write-side protection first:
    - workflow action ledger for approval/save/reject
    - draft lookup before retry for draft creation
@@ -297,7 +297,7 @@ Recommended near-term decision:
 
 ## Next Steps
 
-1. Extract or create shared email scenarios for ADR 003 and this ADR.
+1. Extract or create shared email scenarios for [email-processing/002](../email-processing/002-email-response-classification.md) and this ADR.
 2. Add 30 synthetic email/thread scenarios covering classification and write-side failure cases.
 3. Implement mocked tests for draft lookup, sent-mail verification, and duplicate Slack action delivery.
 4. Record latency and mistake counts for each candidate strategy.

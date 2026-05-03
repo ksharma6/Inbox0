@@ -172,4 +172,4 @@ that production inboxes with active threads will hit model context limits
 (128k tokens for GPT-4o) at thread depths reachable within a single working
 day of back-and-forth.
 
-Raw measurements: [`reports/adr001_token_growth.csv`](../../reports/adr001_token_growth.csv)
+Raw measurements: [`reports/adr001_token_growth.csv`](../../../reports/adr001_token_growth.csv)

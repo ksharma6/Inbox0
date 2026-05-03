@@ -1,4 +1,4 @@
-# 003 — Email Response Classification: Lightweight Gating Before LLM Draft Generation
+# 002 — Email Response Classification: Lightweight Gating Before LLM Draft Generation
 
 **Status:** Proposed  
 **Date:** 2026-04-06  
@@ -12,7 +12,7 @@
 This creates two compounding costs:
 
 1. **Token waste.** Every email that doesn't need a reply still costs input tokens for classification, body formatting, and system prompt overhead.
-2. **Latency.** Even with ADR 002 parallelisation, the ceiling is the slowest individual LLM call. Eliminating no-response emails before that stage removes calls entirely, not just parallelises them.
+2. **Latency.** Even with the parallelisation strategy in [orchestration/001](../orchestration/001-parallelization-strategy.md), the ceiling is the slowest individual LLM call. Eliminating no-response emails before that stage removes calls entirely, not just parallelises them.
 
 The hypothesis is that "does this email require a response?" is a much simpler task than "write a good reply". An LLM may not even be needed here.
 ---
@@ -156,7 +156,7 @@ Fine-tune a small sentence transformer (`all-MiniLM-L6-v2`) on 8–32 labelled e
                                   └─────────────────┘
 ```
 
-The classifier agent is a new, independently testable component. If the eval shows a heuristic or local model meets the recall threshold, no LLM call is made for that stage at all. If a small API model is needed, it runs in parallel (ADR 002 pattern) across all emails before any draft generation begins.
+The classifier agent is a new, independently testable component. If the eval shows a heuristic or local model meets the recall threshold, no LLM call is made for that stage at all. If a small API model is needed, it runs in parallel using the [orchestration/001](../orchestration/001-parallelization-strategy.md) pattern across all emails before any draft generation begins.
 
 This also enables independent iteration: the draft quality and the classification accuracy can be improved separately without touching each other.
 
