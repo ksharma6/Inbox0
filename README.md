@@ -172,8 +172,7 @@ Inbox0/
       usage_tracker.py       # LLM usage tracking
     workflows/
       workflow.py            # EmailProcessingWorkflow (LangGraph graph)
-      workflow_factory.py    # Wiring Gmail, Slack, LLM
-      factory.py             # Helper factory utilities
+      factory.py             # Wiring Gmail, Slack, LLM
       state_manager.py       # Persist/restore workflow state
   tests/
     agent/
