@@ -1,14 +1,14 @@
-# 002 — Parallelization Strategy for Workflow Latency
+# 001 — Parallelization Strategy for Workflow Latency
 
 **Status:** Proposed  
 **Date:** 2026-04-05  
-**Related:** [001 — Email Caching Strategy](001-email-caching-strategy.md)
+**Related:** [email-processing/001 — Email Caching Strategy](../email-processing/001-email-caching-strategy.md)
 
 ---
 
 ## Context
 
-The `EmailProcessingWorkflow` has two sequential loops that each introduce avoidable cumulative latency. Unlike the token-count problem addressed in [001](001-email-caching-strategy.md), this is not a caching problem — the underlying operations are already correct and independent of each other. The issue is that they are executed one at a time when they could fire concurrently.
+The `EmailProcessingWorkflow` has two sequential loops that each introduce avoidable cumulative latency. Unlike the token-count problem addressed in [email-processing/001](../email-processing/001-email-caching-strategy.md), this is not a caching problem — the underlying operations are already correct and independent of each other. The issue is that they are executed one at a time when they could fire concurrently.
 
 ### Loop 1 — Gmail API fetches in `_read_unread_emails`
 
@@ -167,14 +167,14 @@ LangGraph supports parallel node execution via fan-out edges. This would require
 
 ## Combined Latency Estimate
 
-| Step | Before | After caching (ADR 001) | + Parallelisation (this ADR) |
+| Step | Before | After caching (email-processing/001) | + Parallelisation (this ADR) |
 |---|---|---|---|
 | Gmail API fetches | ~2.5 s (5 serial) | ~0.5 s (1 new msg) | ~0.3 s (concurrent) |
 | LLM prefill (40-email thread) | ~15–20 s | ~1–2 s (summary + delta) | same |
 | Draft generation (3 drafts) | ~15 s (serial) | ~15 s (serial) | ~5 s (concurrent) |
 | **Total (rough)** | **~30–40 s** | **~17–18 s** | **~7–8 s** |
 
-Caching (ADR 001) dominates the win on the prefill bottleneck. Parallelisation dominates on draft generation. Both are needed for a responsive end-to-end experience.
+Caching ([email-processing/001](../email-processing/001-email-caching-strategy.md)) dominates the win on the prefill bottleneck. Parallelisation dominates on draft generation. Both are needed for a responsive end-to-end experience.
 
 ---
 
