@@ -9,7 +9,7 @@ from src.routes.integrations_slack.slack_routes import register_slack_routes
 from src.routes.web.flask_routes import register_flask_routes
 from src.utils.json_formatter import JsonFormatter
 from src.utils.load_env import load_dotenv_helper
-from src.workflows.workflow_factory import get_workflow
+from src.workflows.factory import get_workflow
 
 app = Flask(__name__)
 

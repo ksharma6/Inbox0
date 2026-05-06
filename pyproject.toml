@@ -12,7 +12,7 @@ readme = "README.md"
 dependencies = [
     "flask>=3.1",
     "pydantic>=2.13.3",
-    "openai>=2.32.0",
+    "openai>=2.33.0",
     "openrouter>=0.9.1",
     "langchain>=1.2",
     "beautifulsoup4>=4.14",
@@ -32,8 +32,13 @@ dev = [
     "pytest-mock>=3.15",
     "pytest-cov>=5.0",
     "pip-audit>=2.7",
+<<<<<<< dependabot/uv/ruff-0.15.12
     "ruff>=0.15.12",
     "pre-commit>=4.5",
+=======
+    "ruff>=0.4",
+    "pre-commit>=4.6.0",
+>>>>>>> main
 ]
 
 [tool.setuptools.packages.find]
