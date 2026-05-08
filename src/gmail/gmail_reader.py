@@ -64,25 +64,28 @@ class GmailReader:
         unread_only: bool = False,
         include_body: bool = True,
         primary_only: bool = True,
-        thread_id: Optional[List[str]] = None,
+        thread_id: Optional[str] = None,
     ) -> List[EmailMessage]:
         """
         Read emails from the user's inbox.
 
         Builds a Gmail query targeting the Inbox (and Primary by default), then fetches
-        up to `count` messages and returns them as `EmailMessage` models.
+        up to `count` messages and returns them as `EmailMessage` models. If `thread_id`
+        is provided, restricts to the given thread. If `thread_id` is not provided,
+        returns up to `count` messages from the inbox.
 
         Args:
             count (int): Minimum number of messages to fetch (capped at 25).
             unread_only (bool): If True, restricts to unread messages.
             include_body (bool): If True, includes the parsed body text.
             primary_only (bool): If True, restricts to the Primary category.
+            thread_id (Optional[str]): If provided, restricts the query to the given thread.
 
         Returns:
             List[EmailMessage]: Messages in reverse-chronological order from the inbox.
         """
 
-        # target inbox emails only
+        # target primary category in gmail inbox
         query_parts = ["in:inbox"]
 
         if primary_only:
@@ -90,6 +93,9 @@ class GmailReader:
 
         if unread_only:
             query_parts.append("is:unread")
+
+        if thread_id:
+            query_parts.append(f"threadId:{thread_id}")
 
         query = " ".join(query_parts)
 
