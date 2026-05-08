@@ -121,16 +121,59 @@ class TestGmailReaderRetry:
 
 
 class TestGetRecentEmailsInThread:
-    """Thread lookups must include the requested Gmail thread id in the API query."""
+    """Thread lookups must fetch messages through Gmail's thread endpoint."""
 
-    def test_adds_thread_id_to_gmail_query(self, reader):
+    def test_fetches_recent_messages_from_gmail_thread(self, reader):
+        older_message = {
+            "id": "msg_older",
+            "threadId": VALID_THREAD_ID,
+            "internalDate": "1000",
+            "payload": {"headers": [{"name": "Subject", "value": "Older"}]},
+            "labelIds": ["INBOX"],
+        }
+        newer_message = {
+            "id": "msg_newer",
+            "threadId": VALID_THREAD_ID,
+            "internalDate": "2000",
+            "payload": {"headers": [{"name": "Subject", "value": "Newer"}]},
+            "labelIds": ["INBOX"],
+        }
+        reader._execute_read_request = Mock(return_value={"messages": [older_message, newer_message]})
+
+        emails = reader.get_recent_emails_in_thread(VALID_THREAD_ID, count=1)
+
+        get_kwargs = reader.service.users.return_value.threads.return_value.get.call_args.kwargs
+        assert get_kwargs == {"userId": "me", "id": VALID_THREAD_ID, "format": "full"}
+        assert [email.id for email in emails] == ["msg_newer"]
+
+    def test_empty_thread_response_returns_empty_list(self, reader, capsys):
         reader._execute_read_request = Mock(return_value={"messages": []})
 
-        reader.get_recent_emails_in_thread(VALID_THREAD_ID, count=2)
+        emails = reader.get_recent_emails_in_thread(VALID_THREAD_ID, count=2)
 
-        list_kwargs = reader.service.users.return_value.messages.return_value.list.call_args.kwargs
-        assert list_kwargs["maxResults"] == 2
-        assert f"threadId:{VALID_THREAD_ID}" in list_kwargs["q"]
+        assert emails == []
+        assert "No messages found." in capsys.readouterr().out
+
+    def test_skips_invalid_thread_messages(self, reader):
+        invalid_message = {
+            "id": "msg_invalid",
+            "threadId": "",
+            "internalDate": "1000",
+            "payload": {"headers": [{"name": "Subject", "value": "Invalid"}]},
+            "labelIds": ["INBOX"],
+        }
+        valid_message = {
+            "id": "msg_valid",
+            "threadId": VALID_THREAD_ID,
+            "internalDate": "2000",
+            "payload": {"headers": [{"name": "Subject", "value": "Valid"}]},
+            "labelIds": ["INBOX"],
+        }
+        reader._execute_read_request = Mock(return_value={"messages": [invalid_message, valid_message]})
+
+        emails = reader.get_recent_emails_in_thread(VALID_THREAD_ID, count=2)
+
+        assert [email.id for email in emails] == ["msg_valid"]
 
 
 class TestGetEmailMessageExceptionLogging:
