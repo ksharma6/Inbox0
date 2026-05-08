@@ -560,12 +560,12 @@ class EmailProcessingWorkflow:
         Returns:
             GmailAgentState object
         """
-        thread_id = str(uuid.uuid4())
+        workflow_run_id = str(uuid.uuid4())
         self._seen_message_ids = set()
 
         initial_state = GmailAgentState(
             user_id=user_id,
-            thread_id=thread_id,
+            workflow_run_id=workflow_run_id,
         )
 
         # run the workflow

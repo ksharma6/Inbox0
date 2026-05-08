@@ -65,7 +65,10 @@ class GmailAgentState(BaseModel):
 
     # Input
     user_id: str = Field(..., description="Slack user ID requesting email processing")
-    thread_id: str = Field(..., description="Unique ID for the email processing thread")
+    workflow_run_id: str = Field(
+        ...,
+        description="Unique ID for this workflow run",
+    )
 
     # Email data
     unread_emails: List[EmailMessage] = Field(default=[], description="List of unread emails")
