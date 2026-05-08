@@ -120,6 +120,19 @@ class TestGmailReaderRetry:
         assert request.execute.call_count == 2
 
 
+class TestGetRecentEmailsInThread:
+    """Thread lookups must include the requested Gmail thread id in the API query."""
+
+    def test_adds_thread_id_to_gmail_query(self, reader):
+        reader._execute_read_request = Mock(return_value={"messages": []})
+
+        reader.get_recent_emails_in_thread(VALID_THREAD_ID, count=2)
+
+        list_kwargs = reader.service.users.return_value.messages.return_value.list.call_args.kwargs
+        assert list_kwargs["maxResults"] == 2
+        assert f"threadId:{VALID_THREAD_ID}" in list_kwargs["q"]
+
+
 class TestGetEmailMessageExceptionLogging:
     """Exceptions during processing emit ``[GMAIL_FETCH_ERROR]`` logs."""
 
