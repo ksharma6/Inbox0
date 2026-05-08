@@ -217,6 +217,76 @@ curl -X POST http://localhost:5002/resume_workflow \
   -d '{"user_id":"U123ABC","action":"approve_draft"}'
 ```
 
+### Roadmap
+
+Inbox0 is in active development toward **v1.0**, which establishes the project as *an intelligent system that improves by evidence rather than intuition*. Each component ships with baselines and benchmarks, and every change downstream is evaluated against them. Features land when they demonstrate measurable improvement, not when they feel done.
+
+Four components ship together:
+
+- **Triage classifier** — a lightweight gate that decides which emails warrant a drafted response, dropping cost and latency on inbox noise before the expensive LLM runs. Tracked in [#47](https://github.com/ksharma6/Inbox0/issues/47).
+- **Long/short-term semantic memory** — a two-tier retrieval layer giving the agent access to the rich context in the user's inbox, across both years of history (SQLite-vec persistent store) and the current week's active work (Redis working-set cache with last-access TTL). Tracked in [#17](https://github.com/ksharma6/Inbox0/issues/17).
+- **Pipeline evaluation harness** — tracks draft quality, triage accuracy, retrieval relevance, cost, latency, and token usage across the full pipeline. Establishes baselines on every component, runs on every change, and ingests implicit feedback as continuous quality signal. Tracked in [#TBD].
+- **Implicit feedback collection** — instruments the Slack approval flow plus Gmail folder state to measure user satisfaction without asking. Tracks whether each draft was sent, how much it was edited before sending, and distinguishes drafter failures from classifier failures on discards. Tracked in [#TBD].
+
+Track v1.0 progress at the [v1.0 milestone page](https://github.com/ksharma6/Inbox0/milestone/1).
+
+#### v1.0 system architecture
+
+```mermaid
+flowchart TB
+    Gmail[Gmail Inbox] -->|unread emails| Reader[GmailReader]
+    Reader --> Classifier{Triage Classifier<br/>distilBERT-class}
+
+    Classifier -->|noise / FYI| Skip[Skip - no draft]
+    Classifier -->|response needed| Retrieval
+
+    subgraph SemanticMemory[Two-Tier Semantic Memory]
+        direction LR
+        Redis[(Redis<br/>working-set cache)]
+        SQLite[(SQLite-vec<br/>persistent store)]
+        Redis <-->|promotion on read| SQLite
+    end
+
+    Retrieval[Query Rewriter<br/>+ Top-K Retrieval] --> SemanticMemory
+    SemanticMemory --> Drafter
+    Drafter[LLM Drafter] -->|draft + retrieved context| SlackHITL
+
+    SlackHITL{Slack Approval<br/>Approve / Edit / Discard}
+    SlackHITL -->|approve| Send[Gmail: Send]
+    SlackHITL -->|save| GmailDrafts[Gmail: Drafts folder]
+    SlackHITL -->|discard| Discard[Discard]
+
+    SlackHITL -.->|button events| Feedback
+    GmailDrafts -.->|folder state polling| Feedback
+    Send -.->|folder state polling| Feedback
+
+    subgraph FeedbackLoop[Feedback & Evaluation]
+        direction TB
+        Feedback[Implicit Feedback Collection]
+        EvalHarness[Pipeline Evaluation Harness]
+        Feedback -->|production signal| EvalHarness
+    end
+
+    EvalHarness -.->|baselines + deltas| Classifier
+    EvalHarness -.->|baselines + deltas| Retrieval
+    EvalHarness -.->|baselines + deltas| Drafter
+
+    classDef new fill:#4A9E88,stroke:#2A5F4F,color:#fff
+    classDef existing fill:#f0f0f0,stroke:#888,color:#333
+    classDef storage fill:#fff3e0,stroke:#e65100,color:#333
+    classDef terminal fill:#e8f5e9,stroke:#2e7d32,color:#333
+
+    class Classifier,Retrieval,SemanticMemory,Feedback,EvalHarness,Redis,SQLite new
+    class Reader,Drafter,SlackHITL existing
+    class Gmail,Send,GmailDrafts,Discard,Skip terminal
+```
+
+The diagram shows the v1.0 target. Components in teal are new; gray are shipped today. Solid arrows are the request path; dashed arrows are the feedback and measurement path.
+
+#### Beyond v1.0
+
+The longer-term direction is an agent that learns to read, write, and make decisions like its user. Every email the user has written is signal for their voice; every prior decision is signal for their judgment. The semantic memory layer is the substrate that makes user-voice modeling possible in future releases.
+
 ### Troubleshooting
 
 - Slack 401/invalid signature: verify `SLACK_SIGNING_SECRET` and external URLs for `/slack/actions` and `/slack/events`
