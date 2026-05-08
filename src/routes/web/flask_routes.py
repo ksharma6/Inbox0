@@ -27,8 +27,8 @@ def register_flask_routes(app, workflow):
     def start_workflow():
         req = StartWorkflowRequest.model_validate(request.get_json(silent=True) or {})
 
-        thread_id = str(uuid.uuid4())
-        initial_state = GmailAgentState(user_id=req.user_id, thread_id=thread_id)
+        workflow_run_id = str(uuid.uuid4())
+        initial_state = GmailAgentState(user_id=req.user_id, workflow_run_id=workflow_run_id)
 
         result_gen = workflow.workflow.stream(initial_state)
 
