@@ -128,7 +128,24 @@ class GmailReader:
         Returns:
             List[EmailMessage]: Messages from the given thread, if available.
         """
-        return self.read_emails(count=count, thread_id=thread_id)
+        thread = self._execute_read_request(
+            self.service.users().threads().get(userId="me", id=thread_id, format="full")
+        )
+        messages = thread.get("messages", [])
+
+        if not messages:
+            print("No messages found.")
+            return []
+
+        recent_messages = sorted(messages, key=lambda message: int(message.get("internalDate", 0)))[-min(count, 25) :]
+        email_messages = []
+
+        for message in recent_messages:
+            email_msg = self._get_email_message(message["id"], message_detail=message)
+            if email_msg:
+                email_messages.append(email_msg)
+
+        return email_messages
 
     def _get_email_message(
         self,
