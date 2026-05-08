@@ -2,7 +2,7 @@ import datetime
 import os
 from typing import Any, Dict, List, Optional
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 from src.models.gmail import EmailMessage, EmailSummary
 
 
@@ -63,13 +63,10 @@ class ProcessRequestSchema(BaseModel):
 class GmailAgentState(BaseModel):
     """State for Gmail processing workflow"""
 
-    model_config = ConfigDict(populate_by_name=True)
-
     # Input
     user_id: str = Field(..., description="Slack user ID requesting email processing")
     workflow_run_id: str = Field(
         ...,
-        validation_alias=AliasChoices("workflow_run_id", "thread_id"),
         description="Unique ID for this workflow run",
     )
 
