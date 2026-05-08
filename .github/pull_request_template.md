@@ -1,6 +1,3 @@
-#### Title
-<!-- Start with a tag: [ENH], [MNT], [DOC], [BUG], [SEC], or [BREAKING] — e.g. "[ENH] Add spam detector" -->
-
 #### Reference Issues/PRs
 <!--
 Example: Fixes #1234. See also #5678.
@@ -12,8 +9,14 @@ If no issue exists, you can open one here: https://github.com/ksharma6/Inbox0/is
 -->
 
 #### Type of change
+<!--
+Maintenance / cleanup includes small non-behavioral changes such as typos,
+renaming variables, formatting, dependency upkeep, or minimal refactors.
+-->
 - [ ] Bug fix
 - [ ] New feature
+- [ ] Maintenance / cleanup
+- [ ] Test-only change
 - [ ] Breaking change
 - [ ] Documentation only
 
@@ -23,6 +26,10 @@ A clear and concise description of what you have implemented.
 -->
 
 #### Does your contribution introduce a new dependency? If yes, which one?
+<!--
+Examples: Python packages, JS packages, external services, APIs, CLIs, or system tools.
+If none, write "No."
+-->
 
 #### What should a reviewer concentrate their feedback on?
 <!-- If this PR is a draft or work-in-progress, call out which parts are ready for review and which are not. Use bullets or checkboxes. -->
@@ -38,6 +45,6 @@ A clear and concise description of what you have implemented.
     - [DOC] - writing or improving documentation or docstrings
     - [SEC] - security fixes or vulnerability patches
     - [BREAKING] - any change that requires user to update their setup or code 
-- [ ] Tests added or updated for any changed behaviour
+- [ ] Tests added or updated for changed behavior, or explained why not needed
 - [ ] No secrets, credentials, or `.env` values committed
 - [ ] `pyproject.toml` updated if new dependencies were added and `uv.lock` regenerated via `uv sync`
