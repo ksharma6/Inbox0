@@ -21,6 +21,7 @@ from src.routes.web.schemas import (
 )
 
 VALID_SLACK_USER_ID = "U090QS5DDEE"
+VALID_WORKFLOW_RUN_ID = "workflow-run-123"
 
 
 def _make_client(mocker):
@@ -59,8 +60,13 @@ class TestStartWorkflowRequestSchema:
 
 class TestResumeWorkflowRequestSchema:
     def test_accepts_valid_payload(self):
-        req = ResumeWorkflowRequest(user_id=VALID_SLACK_USER_ID, action="approve_draft")
+        req = ResumeWorkflowRequest(
+            user_id=VALID_SLACK_USER_ID,
+            workflow_run_id=VALID_WORKFLOW_RUN_ID,
+            action="approve_draft",
+        )
         assert req.user_id == VALID_SLACK_USER_ID
+        assert req.workflow_run_id == VALID_WORKFLOW_RUN_ID
         assert req.action is ResumeAction.APPROVE_DRAFT
 
     @pytest.mark.parametrize(
@@ -72,16 +78,28 @@ class TestResumeWorkflowRequestSchema:
         ],
     )
     def test_accepts_each_resume_action(self, action_value, expected):
-        req = ResumeWorkflowRequest(user_id=VALID_SLACK_USER_ID, action=action_value)
+        req = ResumeWorkflowRequest(
+            user_id=VALID_SLACK_USER_ID,
+            workflow_run_id=VALID_WORKFLOW_RUN_ID,
+            action=action_value,
+        )
         assert req.action is expected
 
     def test_rejects_unknown_action(self):
         with pytest.raises(ValidationError):
-            ResumeWorkflowRequest(user_id=VALID_SLACK_USER_ID, action="delete_everything")
+            ResumeWorkflowRequest(
+                user_id=VALID_SLACK_USER_ID,
+                workflow_run_id=VALID_WORKFLOW_RUN_ID,
+                action="delete_everything",
+            )
 
     def test_rejects_invalid_user_id(self):
         with pytest.raises(ValidationError):
-            ResumeWorkflowRequest(user_id="test-user-123", action="approve_draft")
+            ResumeWorkflowRequest(
+                user_id="test-user-123",
+                workflow_run_id=VALID_WORKFLOW_RUN_ID,
+                action="approve_draft",
+            )
 
 
 class TestStartWorkflowRoute:
@@ -105,6 +123,45 @@ class TestStartWorkflowRoute:
         assert response.get_json()["error"] == "invalid_request"
         workflow.workflow.stream.assert_not_called()
 
+    def test_completed_response_includes_workflow_run_id(self, mocker):
+        client, workflow = _make_client(mocker)
+        mocker.patch("src.routes.web.flask_routes.uuid.uuid4", return_value=VALID_WORKFLOW_RUN_ID)
+        save_state = mocker.patch("src.routes.web.flask_routes.save_state_to_store")
+        workflow.workflow.stream.return_value = [
+            {"done": {"user_id": VALID_SLACK_USER_ID, "workflow_run_id": VALID_WORKFLOW_RUN_ID}},
+        ]
+
+        response = client.post("/start_workflow", json={"user_id": VALID_SLACK_USER_ID})
+
+        assert response.status_code == 200
+        body = response.get_json()
+        assert body["status"] == "completed"
+        assert body["workflow_run_id"] == VALID_WORKFLOW_RUN_ID
+        save_state.assert_called_once()
+
+    def test_paused_response_includes_workflow_run_id(self, mocker):
+        client, workflow = _make_client(mocker)
+        mocker.patch("src.routes.web.flask_routes.uuid.uuid4", return_value=VALID_WORKFLOW_RUN_ID)
+        save_state = mocker.patch("src.routes.web.flask_routes.save_state_to_store")
+        workflow.workflow.stream.return_value = [
+            {
+                "paused": {
+                    "user_id": VALID_SLACK_USER_ID,
+                    "workflow_run_id": VALID_WORKFLOW_RUN_ID,
+                    "awaiting_approval": True,
+                }
+            },
+        ]
+
+        response = client.post("/start_workflow", json={"user_id": VALID_SLACK_USER_ID})
+
+        assert response.status_code == 200
+        body = response.get_json()
+        assert body["status"] == "paused"
+        assert body["awaiting_approval"] is True
+        assert body["workflow_run_id"] == VALID_WORKFLOW_RUN_ID
+        save_state.assert_called_once()
+
 
 class TestResumeWorkflowRoute:
     def test_invalid_action_returns_400(self, mocker):
@@ -112,7 +169,11 @@ class TestResumeWorkflowRoute:
 
         response = client.post(
             "/resume_workflow",
-            json={"user_id": VALID_SLACK_USER_ID, "action": "delete_everything"},
+            json={
+                "user_id": VALID_SLACK_USER_ID,
+                "workflow_run_id": VALID_WORKFLOW_RUN_ID,
+                "action": "delete_everything",
+            },
         )
 
         assert response.status_code == 400
@@ -123,18 +184,23 @@ class TestResumeWorkflowRoute:
 
     def test_returns_404_when_no_paused_workflow(self, mocker):
         client, workflow = _make_client(mocker)
-        mocker.patch(
+        load_state = mocker.patch(
             "src.routes.web.flask_routes.load_state_from_store",
             return_value=None,
         )
 
         response = client.post(
             "/resume_workflow",
-            json={"user_id": VALID_SLACK_USER_ID, "action": "approve_draft"},
+            json={
+                "user_id": VALID_SLACK_USER_ID,
+                "workflow_run_id": VALID_WORKFLOW_RUN_ID,
+                "action": "approve_draft",
+            },
         )
 
         assert response.status_code == 404
         body = response.get_json()
         assert body["error"] == "no_paused_workflow"
-        assert VALID_SLACK_USER_ID in body["message"]
+        assert VALID_WORKFLOW_RUN_ID in body["message"]
+        load_state.assert_called_once_with(VALID_WORKFLOW_RUN_ID)
         workflow.workflow.stream.assert_not_called()

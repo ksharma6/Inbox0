@@ -7,9 +7,14 @@ from src.workflows.state_manager import (
 from src.workflows.workflow import EmailProcessingWorkflow
 
 
-def resume_workflow_after_action(user_id: str, respond, workflow: EmailProcessingWorkflow):
-    state = load_state_from_store(user_id)
+def resume_workflow_after_action(workflow_run_id: str | None, respond, workflow: EmailProcessingWorkflow):
+    if not workflow_run_id:
+        respond(":warning: Could not resume workflow: missing workflow run ID.")
+        return
+
+    state = load_state_from_store(workflow_run_id)
     if state is None:
+        respond(":warning: Could not resume workflow: saved state was not found.")
         return
     if isinstance(state, dict):
         state = GmailAgentState(**extract_langgraph_state(state))

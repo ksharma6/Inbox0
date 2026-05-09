@@ -39,24 +39,36 @@ def register_flask_routes(app, workflow):
 
             if state.awaiting_approval:
                 save_state_to_store(state)
-                return jsonify({"status": "paused", "awaiting_approval": True})
+                return jsonify(
+                    {
+                        "status": "paused",
+                        "awaiting_approval": True,
+                        "workflow_run_id": state.workflow_run_id,
+                    }
+                )
             final_state = state
 
         save_state_to_store(final_state)
-        return jsonify({"status": "completed", "workflow_complete": final_state.workflow_complete})
+        return jsonify(
+            {
+                "status": "completed",
+                "workflow_complete": final_state.workflow_complete,
+                "workflow_run_id": final_state.workflow_run_id,
+            }
+        )
 
     @app.route("/resume_workflow", methods=["POST"])
     def resume_workflow():
         req = ResumeWorkflowRequest.model_validate(request.get_json(silent=True) or {})
 
-        state = load_state_from_store(req.user_id)
+        state = load_state_from_store(req.workflow_run_id)
 
         if state is None:
             return (
                 jsonify(
                     {
                         "error": "no_paused_workflow",
-                        "message": f"No saved workflow state found for user_id={req.user_id}",
+                        "message": f"No saved workflow state found for workflow_run_id={req.workflow_run_id}",
                     }
                 ),
                 404,
@@ -86,4 +98,10 @@ def register_flask_routes(app, workflow):
                 new_state = GmailAgentState(**actual_state)
             final_state = new_state
         save_state_to_store(final_state)
-        return jsonify({"status": "resumed", "workflow_complete": final_state.workflow_complete})
+        return jsonify(
+            {
+                "status": "resumed",
+                "workflow_complete": final_state.workflow_complete,
+                "workflow_run_id": final_state.workflow_run_id,
+            }
+        )

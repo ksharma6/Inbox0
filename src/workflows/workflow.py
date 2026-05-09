@@ -354,6 +354,7 @@ class EmailProcessingWorkflow:
         draft_id = self.draft_handler.send_draft_for_approval(
             draft=draft_info["draft"],
             user_id=state.user_id,
+            workflow_run_id=state.workflow_run_id,
         )
 
         if draft_id:

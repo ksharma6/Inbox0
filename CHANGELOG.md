@@ -7,6 +7,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.2.0] — 2026-05-08
+
+### Breaking Changed
+- Workflow state is now persisted and resumed by `workflow_run_id` instead of Slack `user_id`, so `/resume_workflow` callers must provide the `workflow_run_id` returned by `/start_workflow`.
+- Slack draft approval buttons now carry `workflow_run_id` so approval actions resume the specific workflow run they belong to rather than the latest saved run for a user.
+
+### Fixed
+- Prevented concurrent workflow runs for the same Slack user from overwriting each other in persisted state.
+
+### Maintenance
+- Clarified workflow state naming by using `workflow_run_id` for app workflow runs, keeping `thread_id` reserved for Gmail conversation threads.
+- Expanded focused test coverage around workflow state persistence, Slack resume routing, and workflow-run ID validation.
+
+---
+
 ## [0.1.1] — 2026-04-25
 
 ### Added

@@ -32,4 +32,5 @@ class ResumeWorkflowRequest(BaseModel):
         pattern=SLACK_USER_ID_PATTERN,
         description=SLACK_USER_ID_DESCRIPTION,
     )
+    workflow_run_id: str = Field(..., description="Workflow run ID returned by /start_workflow")
     action: ResumeAction = Field(..., description="Action to take on the current draft")
