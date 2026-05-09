@@ -21,21 +21,24 @@ from flask import Flask
 from src.routes.integrations_slack import slack_routes as slack_routes_module
 from src.routes.integrations_slack.slack_routes import (
     _parse_slack_action,
+    _workflow_run_id_from_action_value,
     register_slack_routes,
 )
 
 VALID_SLACK_USER_ID = "U090QS5DDEE"
+VALID_WORKFLOW_RUN_ID = "workflow-run-123"
 
 
 def _valid_action_body(action_id="approve_draft", value=None):
     """Minimal Slack action body that passes ``SlackActionBody`` validation."""
+    action_type = action_id.split("_")[0]
     return {
         "user": {"id": VALID_SLACK_USER_ID, "name": "kishen"},
         "team": {"id": "T123", "domain": "example"},
         "actions": [
             {
                 "action_id": action_id,
-                "value": value or f"{action_id.split('_')[0]}_draft-abc-123",
+                "value": value or f"{action_type}:{VALID_WORKFLOW_RUN_ID}:draft-abc-123",
                 "type": "button",
             }
         ],
@@ -111,6 +114,25 @@ class TestParseSlackAction:
         assert "[SLACK_PAYLOAD_INVALID]" in caplog.text
 
 
+class TestWorkflowRunIdFromActionValue:
+    def test_extracts_workflow_run_id_from_new_action_value_format(self):
+        value = f"approve:{VALID_WORKFLOW_RUN_ID}:draft-abc-123"
+
+        assert _workflow_run_id_from_action_value(value) == VALID_WORKFLOW_RUN_ID
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "approve_draft-abc-123",
+            "approve:only-two-parts",
+            "approve",
+            "",
+        ],
+    )
+    def test_returns_none_for_values_without_workflow_run_id(self, value):
+        assert _workflow_run_id_from_action_value(value) is None
+
+
 class TestSlackEventsFormPath:
     def _post_form_payload(self, client, payload_obj):
         """POST a form-encoded Slack interactive payload to /slack/events."""
@@ -161,9 +183,24 @@ class TestSlackEventsFormPath:
         assert response.get_json() == {"response_action": "ack"}
         workflow.draft_handler.handle_approval_action.assert_called_once()
         resume_mock.assert_called_once()
-        # The user_id passed to resume must come from the parsed model, not raw indexing.
-        called_user_id = resume_mock.call_args.args[0]
-        assert called_user_id == VALID_SLACK_USER_ID
+        called_workflow_run_id = resume_mock.call_args.args[0]
+        assert called_workflow_run_id == VALID_WORKFLOW_RUN_ID
+
+    def test_old_style_action_value_does_not_fall_back_to_user_id(self, mocker):
+        resume_mock = mocker.patch.object(slack_routes_module, "resume_workflow_after_action")
+        client, _, workflow = _make_client(mocker)
+
+        response = self._post_form_payload(
+            client,
+            _valid_action_body(action_id="approve_draft", value="approve_draft-abc-123"),
+        )
+
+        assert response.status_code == 200
+        workflow.draft_handler.handle_approval_action.assert_called_once()
+        resume_mock.assert_called_once()
+        called_workflow_run_id = resume_mock.call_args.args[0]
+        assert called_workflow_run_id is None
+        assert called_workflow_run_id != VALID_SLACK_USER_ID
 
     def test_unknown_action_id_falls_through_to_handler(self, mocker):
         # A valid-shaped body with an unknown action_id should NOT dispatch to
