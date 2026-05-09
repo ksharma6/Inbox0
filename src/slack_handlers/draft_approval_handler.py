@@ -45,13 +45,16 @@ class DraftApprovalHandler:
         self.draft_timeouts = {}
         self.DRAFT_TIMEOUT_HOURS = 24
 
-    def send_draft_for_approval(self, draft: Dict, user_id: str) -> Optional[str]:
+    def send_draft_for_approval(
+        self, draft: Dict, user_id: str, workflow_run_id: Optional[str] = None
+    ) -> Optional[str]:
         """
         Send a draft email for approval with interactive buttons.
 
         parameters:
             draft (Dict): Gmail draft dictionary from create_draft()
             user_id (str): Slack user ID to send approval request to
+            workflow_run_id (Optional[str]): Workflow run ID to resume when the user acts on the draft
 
         Returns:
             str: The draft ID for tracking, or None if failed to send draft for approval
@@ -66,13 +69,14 @@ class DraftApprovalHandler:
                 "draft": draft,
                 "decoded_draft": decoded_draft,
                 "user_id": user_id,
+                "workflow_run_id": workflow_run_id,
                 "created_at": datetime.now(),
                 "status": "pending",
             }
 
             self.draft_timeouts[draft_id] = datetime.now() + timedelta(hours=self.DRAFT_TIMEOUT_HOURS)
 
-            approval_message = self._create_approval_message(decoded_draft, draft_id)
+            approval_message = self._create_approval_message(decoded_draft, draft_id, workflow_run_id)
 
             # Send to Slack
             target = user_id
@@ -94,13 +98,16 @@ class DraftApprovalHandler:
             logging.exception("Unexpected error sending draft for approval")
             raise
 
-    def _create_approval_message(self, decoded_draft: Dict, draft_id: str) -> Dict:
+    def _create_approval_message(
+        self, decoded_draft: Dict, draft_id: str, workflow_run_id: Optional[str] = None
+    ) -> Dict:
         """
         Create the approval message with interactive buttons.
 
         parameters:
             decoded_draft (Dict): Decoded draft data
             draft_id (str): Unique draft identifier
+            workflow_run_id (Optional[str]): Workflow run ID to include in Slack action values
 
         Returns:
             Dict: Message text and blocks for Slack approval message
@@ -117,6 +124,11 @@ class DraftApprovalHandler:
             attachment_list = ", ".join(attachments)
             text += f"*Attachments:* {attachment_list}\n"
 
+        def action_value(action_type: str) -> str:
+            if workflow_run_id:
+                return f"{action_type}:{workflow_run_id}:{draft_id}"
+            return f"{action_type}_{draft_id}"
+
         # define slack blocks for approval message
         blocks = [
             {"type": "section", "text": {"type": "mrkdwn", "text": text}},
@@ -132,7 +144,7 @@ class DraftApprovalHandler:
                             "emoji": True,
                         },
                         "style": "primary",
-                        "value": f"approve_{draft_id}",
+                        "value": action_value("approve"),
                         "action_id": "approve_draft",
                     },
                     {
@@ -143,7 +155,7 @@ class DraftApprovalHandler:
                             "emoji": True,
                         },
                         "style": "danger",
-                        "value": f"reject_{draft_id}",
+                        "value": action_value("reject"),
                         "action_id": "reject_draft",
                     },
                     {
@@ -153,7 +165,7 @@ class DraftApprovalHandler:
                             "text": "💾 Save Draft",
                             "emoji": True,
                         },
-                        "value": f"save_{draft_id}",
+                        "value": action_value("save"),
                         "action_id": "save_draft",
                     },
                 ],
@@ -191,7 +203,10 @@ class DraftApprovalHandler:
             value = action["value"]
             user_id = body["user"]["id"]
 
-            action_type, draft_id = value.split("_", 1)
+            if ":" in value:
+                action_type, _, draft_id = value.split(":", 2)
+            else:
+                action_type, draft_id = value.split("_", 1)
 
             # Check if draft exists and is still pending
             if draft_id not in self.pending_drafts:

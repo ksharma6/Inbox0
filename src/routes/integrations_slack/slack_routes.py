@@ -33,6 +33,14 @@ def _parse_slack_action(body, event_name):
         return None
 
 
+def _workflow_run_id_from_action_value(value: str) -> str | None:
+    """Extract workflow_run_id from action values formatted as action:workflow_run_id:draft_id."""
+    parts = value.split(":", 2)
+    if len(parts) == 3:
+        return parts[1]
+    return None
+
+
 def register_slack_routes(app, slack_app: SlackApp, workflow):
     @slack_app.action("approve_draft")
     def approve_draft_action(ack, body, respond):
@@ -45,7 +53,7 @@ def register_slack_routes(app, slack_app: SlackApp, workflow):
             return
 
         workflow.draft_handler.handle_approval_action(ack, body, respond)
-        resume_workflow_after_action(parsed.user.id, respond, workflow)
+        resume_workflow_after_action(_workflow_run_id_from_action_value(parsed.actions[0].value), respond, workflow)
 
     @slack_app.action("reject_draft")
     def reject_draft_action(ack, body, respond):
@@ -58,7 +66,7 @@ def register_slack_routes(app, slack_app: SlackApp, workflow):
             return
 
         workflow.draft_handler.handle_approval_action(ack, body, respond)
-        resume_workflow_after_action(parsed.user.id, respond, workflow)
+        resume_workflow_after_action(_workflow_run_id_from_action_value(parsed.actions[0].value), respond, workflow)
 
     @slack_app.action("save_draft")
     def save_draft_action(ack, body, respond):
@@ -71,7 +79,7 @@ def register_slack_routes(app, slack_app: SlackApp, workflow):
             return
 
         workflow.draft_handler.handle_approval_action(ack, body, respond)
-        resume_workflow_after_action(parsed.user.id, respond, workflow)
+        resume_workflow_after_action(_workflow_run_id_from_action_value(parsed.actions[0].value), respond, workflow)
 
     action_dispatch = {
         "approve_draft": approve_draft_action,

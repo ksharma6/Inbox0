@@ -16,7 +16,7 @@ class StateManager:
     Example:
         state_manager = StateManager(storage_backend="memory")
         state_manager.save_state(state)
-        state_manager.load_state(user_id)
+        state_manager.load_state(workflow_run_id)
     """
 
     def __init__(self, storage_backend: str = "memory"):
@@ -46,16 +46,16 @@ class StateManager:
         serialized_bytes = pickle.dumps(serialized_data)
 
         if self.storage_backend == "memory":
-            self._memory_store[state.user_id] = serialized_bytes
+            self._memory_store[state.workflow_run_id] = serialized_bytes
         elif self.storage_backend == "file":
-            self._save_to_file(state.user_id, serialized_bytes)
+            self._save_to_file(state.workflow_run_id, serialized_bytes)
 
-    def load_state(self, user_id: str) -> Optional[GmailAgentState]:
+    def load_state(self, workflow_run_id: str) -> Optional[GmailAgentState]:
         """
         Load state with proper deserialization
 
         Args:
-            user_id: User ID to load state for
+            workflow_run_id: Workflow run ID to load state for
 
         Returns:
             GmailAgentState object or None if not found
@@ -66,9 +66,9 @@ class StateManager:
         """
         try:
             if self.storage_backend == "memory":
-                serialized_bytes = self._memory_store.get(user_id)
+                serialized_bytes = self._memory_store.get(workflow_run_id)
             elif self.storage_backend == "file":
-                serialized_bytes = self._load_from_file(user_id)
+                serialized_bytes = self._load_from_file(workflow_run_id)
             else:
                 serialized_bytes = None
 
@@ -91,7 +91,7 @@ class StateManager:
             return GmailAgentState(**actual_state)
 
         except Exception as e:
-            print(f"Error loading state for user {user_id}: {e}")
+            print(f"Error loading state for workflow_run_id {workflow_run_id}: {e}")
             return None
 
 
@@ -123,6 +123,6 @@ def save_state_to_store(state: GmailAgentState) -> None:
     state_manager.save_state(state)
 
 
-def load_state_from_store(user_id: str) -> Optional[GmailAgentState]:
+def load_state_from_store(workflow_run_id: str) -> Optional[GmailAgentState]:
     """Load state using the state manager"""
-    return state_manager.load_state(user_id)
+    return state_manager.load_state(workflow_run_id)
