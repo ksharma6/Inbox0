@@ -40,7 +40,11 @@ def workflow(mocker):
 
 class TestReadUnreadEmails:
     def _make_state(self):
-        return GmailAgentState(user_id="test_user", workflow_run_id="test_workflow_run")
+        return GmailAgentState(
+            gmail_account_id="gmail-account-123",
+            slack_user_id="U12345678",
+            workflow_run_id="test_workflow_run",
+        )
 
     def _setup_mocks(self, workflow, multi_thread_inbox):
         """

@@ -39,17 +39,37 @@ def test_agent_schema_defaults_app_name_to_inbox0():
 
 
 def test_gmail_agent_state_uses_workflow_run_id_not_thread_id():
-    state = GmailAgentState(user_id="U090QS5DDEE", workflow_run_id="workflow-run-123")
+    state = GmailAgentState(
+        gmail_account_id="gmail-account-123",
+        slack_user_id="U12345678",
+        workflow_run_id="workflow-run-123",
+    )
 
+    assert state.gmail_account_id == "gmail-account-123"
+    assert state.slack_user_id == "U12345678"
     assert state.workflow_run_id == "workflow-run-123"
     assert not hasattr(state, "thread_id")
+    assert not hasattr(state, "user_id")
 
 
 def test_gmail_agent_state_rejects_legacy_thread_id_without_workflow_run_id():
     with pytest.raises(ValidationError) as exc_info:
-        GmailAgentState(user_id="U090QS5DDEE", thread_id="legacy-thread-id")
+        GmailAgentState(
+            gmail_account_id="gmail-account-123",
+            slack_user_id="U12345678",
+            thread_id="legacy-thread-id",
+        )
 
     assert any(err["loc"] == ("workflow_run_id",) for err in exc_info.value.errors())
+
+
+def test_gmail_agent_state_rejects_legacy_user_id_without_explicit_ids():
+    with pytest.raises(ValidationError) as exc_info:
+        GmailAgentState(user_id="U12345678", workflow_run_id="workflow-run-123")
+
+    errors = exc_info.value.errors()
+    assert any(err["loc"] == ("gmail_account_id",) for err in errors)
+    assert any(err["loc"] == ("slack_user_id",) for err in errors)
 
 
 def test_create_draft_schema_exposes_optional_thread_id():

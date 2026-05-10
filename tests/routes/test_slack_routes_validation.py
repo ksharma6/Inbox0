@@ -25,7 +25,7 @@ from src.routes.integrations_slack.slack_routes import (
     register_slack_routes,
 )
 
-VALID_SLACK_USER_ID = "U090QS5DDEE"
+VALID_SLACK_USER_ID = "U12345678"
 VALID_WORKFLOW_RUN_ID = "workflow-run-123"
 
 

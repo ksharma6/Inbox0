@@ -11,9 +11,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 - Preserved Gmail `threadId` when creating, saving, and sending draft replies so workflow-generated responses stay attached to the original Gmail conversation.
+- Protected `/start_workflow` and `/resume_workflow` with `X-Inbox0-API-Key` and server-side `gmail_account_id` ownership to prevent client-supplied identity spoofing.
+- Prevented cross-account workflow resume attempts by checking saved workflow state ownership before resuming.
 
 ### Maintenance
+- Renamed workflow identity fields to distinguish authenticated Gmail account ownership from Slack notification routing.
 - Added focused Gmail writer, workflow handoff, and tool schema tests for threaded draft/reply behavior.
+- Expanded route, workflow, and Slack tests for API-key auth, spoofed identity rejection, cross-account resume denial, and hallucinated Slack routing protection.
+- Documented workflow API auth configuration in `.env.example` and `README.md`.
 
 ---
 

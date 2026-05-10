@@ -166,7 +166,6 @@ class EmailProcessingWorkflow:
                 user_prompt=prompt,
                 llm_tool_schema=None,
                 system_message="You are an email assistant that speaks succinctly and professionally.",
-                user_id=state.user_id,
             )
             summary_text = self.agent.process_request(request_schema)
 
@@ -236,7 +235,6 @@ class EmailProcessingWorkflow:
                 system_message=(
                     "You are an email assistant that analyzes emails to determine which ones require a response."
                 ),
-                user_id=state.user_id,
             )
             content = self.agent.process_request(request_schema)
 
@@ -354,7 +352,7 @@ class EmailProcessingWorkflow:
 
         draft_id = self.draft_handler.send_draft_for_approval(
             draft=draft_info["draft"],
-            user_id=state.user_id,
+            slack_user_id=state.slack_user_id,
             workflow_run_id=state.workflow_run_id,
         )
 
@@ -397,7 +395,7 @@ class EmailProcessingWorkflow:
             if state.draft_responses:
                 summary_parts.append(
                     f"\n📝 *Draft Responses Created*\n{len(state.draft_responses)} draft responses "
-                    "have been created and sent to Slack for your approval."
+                    "were created and reviewed through Slack."
                 )
 
             if state.pending_approvals:
@@ -553,11 +551,12 @@ class EmailProcessingWorkflow:
             )
         self._seen_message_ids |= ids_this_step
 
-    def run(self, user_id: str) -> GmailAgentState:
+    def run(self, gmail_account_id: str, slack_user_id: str) -> GmailAgentState:
         """Run the email processing workflow
 
         Args:
-            user_id: string of user id
+            gmail_account_id: Authenticated Gmail account identifier that owns the workflow.
+            slack_user_id: Slack user ID that receives workflow notifications.
 
         Returns:
             GmailAgentState object
@@ -566,7 +565,8 @@ class EmailProcessingWorkflow:
         self._seen_message_ids = set()
 
         initial_state = GmailAgentState(
-            user_id=user_id,
+            gmail_account_id=gmail_account_id,
+            slack_user_id=slack_user_id,
             workflow_run_id=workflow_run_id,
         )
 

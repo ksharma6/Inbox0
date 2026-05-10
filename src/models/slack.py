@@ -25,7 +25,7 @@ class SlackToolFunction:
                         type="object",
                         description="The Gmail draft dictionary returned from create_draft() function",
                     ),
-                    "user_id": ParamProperties(
+                    "slack_user_id": ParamProperties(
                         type="string",
                         description="Slack user ID to send approval request to",
                     ),
@@ -34,6 +34,6 @@ class SlackToolFunction:
                         description="Optional channel ID (if not provided, sends DM)",
                     ),
                 },
-                required=["draft", "user_id"],
+                required=["draft", "slack_user_id"],
             ),
         )

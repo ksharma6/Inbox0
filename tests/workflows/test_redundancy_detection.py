@@ -152,6 +152,6 @@ class TestDetectCrossStepDuplicates:
         workflow._seen_message_ids = {"msg_from_previous_run"}
 
         workflow.workflow.stream = lambda state, **kwargs: iter([{}])
-        workflow.run(user_id="test_user")
+        workflow.run(gmail_account_id="gmail-account-123", slack_user_id="U12345678")
 
         assert "msg_from_previous_run" not in workflow._seen_message_ids
