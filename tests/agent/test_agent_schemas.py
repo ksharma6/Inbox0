@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 from src.models.agent_schemas import AgentSchema, GmailAgentState
+from src.models.gmail import GmailToolFunction
 
 
 def test_agent_schema_uses_openrouter_api_key():
@@ -49,3 +50,11 @@ def test_gmail_agent_state_rejects_legacy_thread_id_without_workflow_run_id():
         GmailAgentState(user_id="U090QS5DDEE", thread_id="legacy-thread-id")
 
     assert any(err["loc"] == ("workflow_run_id",) for err in exc_info.value.errors())
+
+
+def test_create_draft_schema_exposes_optional_thread_id():
+    """Agent tool schema should let create_draft attach drafts to Gmail threads."""
+    schema = GmailToolFunction.generate_create_draft_schema()
+
+    assert schema.parameters.properties["thread_id"].type == "string"
+    assert "thread_id" not in schema.parameters.required

@@ -1,4 +1,5 @@
 import base64
+import logging
 import mimetypes
 import os
 from email import message_from_bytes
@@ -10,6 +11,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from .gmail_authenticator import auth_user
+
+logger = logging.getLogger(__name__)
 
 
 class GmailWriter:
@@ -50,6 +53,7 @@ class GmailWriter:
         subject: str,
         message: str,
         attachment_path: Optional[str] = None,
+        thread_id: Optional[str] = None,
     ) -> Optional[dict]:
         """
         Create a draft email message dictionary given the sender, recipient, subject, message,
@@ -61,6 +65,7 @@ class GmailWriter:
             subject (str): The subject line of the email.
             message (str): The body of the email.
             attachment_path (Optional[str], optional): The path to the attachment. Defaults to None.
+            thread_id (Optional[str], optional): Gmail thread ID to attach the draft to. Defaults to None.
 
         Returns:
             Optional[dict]: The encoded draft email message.
@@ -97,9 +102,14 @@ class GmailWriter:
             raw_bytes = base64.urlsafe_b64encode(draft.as_bytes())
             raw_str = raw_bytes.decode()
 
-            return {"raw": raw_str}
+            draft_body = {"raw": raw_str}
+            if thread_id:
+                draft_body["threadId"] = thread_id
+
+            return draft_body
 
         except HttpError as error:
+            logger.exception("Error creating Gmail draft")
             print(f"An error occurred: {error}")
             return None
 
@@ -127,6 +137,7 @@ class GmailWriter:
         """
         send_message = self.service.users().messages().send(userId="me", body=draft).execute()
         print("Message issued successfully")
+        logger.info("Gmail message sent successfully")
 
         return send_message
 
@@ -171,12 +182,17 @@ class GmailWriter:
         raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
 
         try:
-            message = self.service.users().messages().send(userId="me", body=raw_message).execute()
+            body = {"raw": raw_message}
+            if original_message.get("threadId"):
+                body["threadId"] = original_message["threadId"]
+
+            message = self.service.users().messages().send(userId="me", body=body).execute()
             print(f"Reply sent successfully! Message ID: {message['id']}")
+            logger.info("Gmail reply sent successfully with message_id=%s", message["id"])
             return message
 
-        except HttpError as error:
-            print(f"An error occurred while sending reply: {error}")
+        except HttpError:
+            logger.exception("Error sending Gmail reply")
             return None
 
     def save_draft(self, draft):
@@ -191,12 +207,15 @@ class GmailWriter:
         """
         try:
             create_draft = {"message": {"raw": draft["raw"]}}
+            if draft.get("threadId"):
+                create_draft["message"]["threadId"] = draft["threadId"]
 
             saved_draft = self.service.users().drafts().create(userId="me", body=create_draft).execute()
             print(f"Draft saved successfully with ID: {saved_draft.get('id', 'N/A')}")
+            logger.info("Gmail draft saved successfully with draft_id=%s", saved_draft.get("id", "N/A"))
             return saved_draft
-        except HttpError as error:
-            print(f"An error occurred while saving draft: {error}")
+        except HttpError:
+            logger.exception("Error saving Gmail draft")
             return None
 
     def _email_message_decoder(self, raw_str):

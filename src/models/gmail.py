@@ -189,6 +189,10 @@ class GmailToolFunction:
                     "subject": ParamProperties(type="string", description="The subject of the email."),
                     "message": ParamProperties(type="string", description="The main content of the email."),
                     "attachment_path": ParamProperties(type="string", description="Path to attachment - Optional"),
+                    "thread_id": ParamProperties(
+                        type="string",
+                        description="Gmail thread ID to attach this draft to - Optional",
+                    ),
                 },
                 required=["sender", "recipient", "subject", "message"],
             ),

@@ -302,6 +302,7 @@ class EmailProcessingWorkflow:
                         recipient=email.from_email,
                         subject=f"Re: {email.subject}",
                         message=draft_content,
+                        thread_id=email.thread_id,
                     )
 
                     draft_responses.append(
