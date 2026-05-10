@@ -46,14 +46,14 @@ class DraftApprovalHandler:
         self.DRAFT_TIMEOUT_HOURS = 24
 
     def send_draft_for_approval(
-        self, draft: Dict, user_id: str, workflow_run_id: Optional[str] = None
+        self, draft: Dict, slack_user_id: str, workflow_run_id: Optional[str] = None
     ) -> Optional[str]:
         """
         Send a draft email for approval with interactive buttons.
 
         parameters:
             draft (Dict): Gmail draft dictionary from create_draft()
-            user_id (str): Slack user ID to send approval request to
+            slack_user_id (str): Slack user ID to send approval request to
             workflow_run_id (Optional[str]): Workflow run ID to resume when the user acts on the draft
 
         Returns:
@@ -68,7 +68,7 @@ class DraftApprovalHandler:
             self.pending_drafts[draft_id] = {
                 "draft": draft,
                 "decoded_draft": decoded_draft,
-                "user_id": user_id,
+                "slack_user_id": slack_user_id,
                 "workflow_run_id": workflow_run_id,
                 "created_at": datetime.now(),
                 "status": "pending",
@@ -79,7 +79,7 @@ class DraftApprovalHandler:
             approval_message = self._create_approval_message(decoded_draft, draft_id, workflow_run_id)
 
             # Send to Slack
-            target = user_id
+            target = slack_user_id
             response = self.slack_app.client.chat_postMessage(
                 channel=target,
                 text=approval_message["text"],

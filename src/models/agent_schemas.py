@@ -64,7 +64,8 @@ class GmailAgentState(BaseModel):
     """State for Gmail processing workflow"""
 
     # Input
-    user_id: str = Field(..., description="Slack user ID requesting email processing")
+    gmail_account_id: str = Field(..., description="Authenticated Gmail account identifier that owns this workflow")
+    slack_user_id: str = Field(..., description="Slack user ID receiving workflow notifications")
     workflow_run_id: str = Field(
         ...,
         description="Unique ID for this workflow run",
