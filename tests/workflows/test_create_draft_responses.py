@@ -66,3 +66,34 @@ def test_create_draft_responses_passes_original_thread_id(workflow, mocker):
         thread_id=email.thread_id,
     )
     assert result.draft_responses[0]["draft"]["threadId"] == email.thread_id
+
+
+def test_hallucinated_slack_user_id_does_not_change_draft_routing(workflow, mocker):
+    """LLM-derived draft metadata must not override the authenticated Slack route."""
+    save_state = mocker.patch("src.workflows.workflow.save_state_to_store")
+    workflow.draft_handler.send_draft_for_approval.return_value = "draft-123"
+    state = GmailAgentState(
+        gmail_account_id="gmail-account-123",
+        slack_user_id="U12345678",
+        workflow_run_id="workflow-123",
+        draft_responses=[
+            {
+                "email_id": "email-1",
+                "draft": {"raw": "encoded-message"},
+                "priority": "High",
+                "draft_content": "Looks good.",
+                "slack_user_id": "UATTACKER1",
+            }
+        ],
+    )
+
+    result = workflow._send_drafts_to_slack(state)
+
+    workflow.draft_handler.send_draft_for_approval.assert_called_once_with(
+        draft={"raw": "encoded-message"},
+        slack_user_id="U12345678",
+        workflow_run_id="workflow-123",
+    )
+    assert result.awaiting_approval is True
+    assert result.current_draft_id == "draft-123"
+    save_state.assert_called_once_with(result)
