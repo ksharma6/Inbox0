@@ -395,7 +395,7 @@ class EmailProcessingWorkflow:
             if state.draft_responses:
                 summary_parts.append(
                     f"\n📝 *Draft Responses Created*\n{len(state.draft_responses)} draft responses "
-                    "have been created and sent to Slack for your approval."
+                    "were created and reviewed through Slack."
                 )
 
             if state.pending_approvals:
