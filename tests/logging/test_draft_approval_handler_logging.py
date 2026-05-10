@@ -16,7 +16,7 @@ def test_draft_approval_handler_logging(caplog, mocker):
     draft_handler.pending_drafts["test_draft_id"] = {
         "draft": {"id": "draft_123"},
         "decoded_draft": {},
-        "user_id": "test_user_id",
+        "slack_user_id": "test_user_id",
         "status": "pending",
         "slack_message_ts": "1234567890.123456",
         "slack_channel": "C12345",

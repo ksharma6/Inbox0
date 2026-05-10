@@ -40,7 +40,8 @@ def test_create_draft_responses_passes_original_thread_id(workflow, mocker):
         thread_id="thread-123",
     )
     state = GmailAgentState(
-        user_id="U123",
+        gmail_account_id="gmail-account-123",
+        slack_user_id="U12345678",
         workflow_run_id="workflow-123",
         unread_emails=[email],
         processed_emails=[

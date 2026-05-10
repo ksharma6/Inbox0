@@ -30,7 +30,8 @@ def test_resume_workflow_after_action_streams_and_saves_final_state(mocker):
     respond = mocker.Mock()
     workflow = mocker.Mock()
     saved_state = GmailAgentState(
-        user_id="U090QS5DDEE",
+        gmail_account_id="gmail-account-123",
+        slack_user_id="U12345678",
         workflow_run_id="workflow-run-123",
         awaiting_approval=True,
     )
