@@ -96,6 +96,12 @@ OPENROUTER_BASE_URL=https://openrouter.ai/api/v1  # override for other providers
 LANGSMITH_API_KEY=your-langsmith-api-key # from https://smith.langchain.com — used for LangGraph tracing
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_SIGNING_SECRET=...
+# Protects /start_workflow and /resume_workflow. Generate with: openssl rand -hex 32
+INBOX0_API_KEY=your-generated-workflow-api-key
+# Stable label for the Gmail account this API key controls
+INBOX0_GMAIL_ACCOUNT_ID=personal-gmail
+# Slack member ID that receives draft approval DMs
+INBOX0_SLACK_USER_ID=U12345678
 # Absolute path to the tokens folder that contains Gmail OAuth files (must end with a trailing slash)
 TOKENS_PATH=/absolute/path/to/Inbox0/tokens/
 ```
@@ -122,10 +128,12 @@ uv run python main.py
 ### API endpoints
 
 - POST `/start_workflow`
-  - Body: `{ "user_id": "U123ABC" }` (Slack user ID to DM approval requests)
+  - Header: `X-Inbox0-API-Key: <INBOX0_API_KEY>`
+  - Body: `{}`
   - Starts the LangGraph workflow. Returns `{"status": "paused", "awaiting_approval": true}` when waiting on Slack approval, or `{"status": "completed", ...}` when it finishes in one pass.
 - POST `/resume_workflow`
-  - Body: `{ "user_id": "U123ABC", "action": "approve_draft"|"reject_draft"|"save_draft" }`
+  - Header: `X-Inbox0-API-Key: <INBOX0_API_KEY>`
+  - Body: `{ "workflow_run_id": "workflow-run-id-from-start", "action": "approve_draft"|"reject_draft"|"save_draft" }`
   - Resumes the workflow after a Slack action when needed.
 
 Slack endpoints used by the app
@@ -137,6 +145,9 @@ Slack endpoints used by the app
 
 - `.env` is loaded at runtime. Ensure it exists at the project root before starting the app.
 - `TOKENS_PATH` must be an absolute path and end with a trailing slash. It should contain `credentials.json` and will be where `token.json` is created.
+- `INBOX0_API_KEY` is a local workflow API secret. Generate it with `openssl rand -hex 32` and send it as the `X-Inbox0-API-Key` header when calling protected workflow routes.
+- `INBOX0_GMAIL_ACCOUNT_ID` is a stable server-side label for the Gmail account this API key controls, such as `personal-gmail`.
+- `INBOX0_SLACK_USER_ID` is the Slack member ID that receives draft approval DMs. In Slack, open your profile, choose the more actions menu, then copy your member ID.
 - The Flask server defaults to port `5002`.
 - `LANGSMITH_API_KEY` enables LangGraph tracing via [LangSmith](https://smith.langchain.com). Create a free account, generate an API key, and set `LANGCHAIN_TRACING_V2=true` in your `.env` to activate tracing.
 
@@ -189,7 +200,7 @@ Inbox0/
   <img src="assets/inbox0_workflow_diagram.svg" alt="Inbox Zero Workflow Diagram" width="800" />
 </p>
 
-1. Client calls `/start_workflow` with a Slack `user_id`
+1. Client calls `/start_workflow` with `X-Inbox0-API-Key`
 2. `EmailProcessingWorkflow`:
   - reads unread emails
   - summarizes, analyzes, and drafts responses using your configured LLM (any OpenRouter or OpenAI SDK-compatible model)
@@ -206,7 +217,8 @@ Start workflow
 ```bash
 curl -X POST http://localhost:5002/start_workflow \
   -H 'Content-Type: application/json' \
-  -d '{"user_id":"U123ABC"}'
+  -H "X-Inbox0-API-Key: $INBOX0_API_KEY" \
+  -d '{}'
 ```
 
 Resume after an approval (usually triggered internally from Slack)
@@ -214,7 +226,8 @@ Resume after an approval (usually triggered internally from Slack)
 ```bash
 curl -X POST http://localhost:5002/resume_workflow \
   -H 'Content-Type: application/json' \
-  -d '{"user_id":"U123ABC","action":"approve_draft"}'
+  -H "X-Inbox0-API-Key: $INBOX0_API_KEY" \
+  -d '{"workflow_run_id":"workflow-run-id-from-start","action":"approve_draft"}'
 ```
 
 ### Roadmap
