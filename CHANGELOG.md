@@ -7,6 +7,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.2.1] — 2026-05-09
+
+### Fixed
+- Preserved Gmail `threadId` when creating, saving, and sending draft replies so workflow-generated responses stay attached to the original Gmail conversation.
+
+### Maintenance
+- Added focused Gmail writer, workflow handoff, and tool schema tests for threaded draft/reply behavior.
+
+---
+
 ## [0.2.0] — 2026-05-08
 
 ### Breaking Changed
