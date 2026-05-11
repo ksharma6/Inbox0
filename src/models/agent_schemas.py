@@ -1,8 +1,9 @@
 import datetime
 import os
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from src.models.gmail import EmailMessage, EmailSummary
 
 
@@ -96,3 +97,35 @@ class GmailAgentState(BaseModel):
     # Final output
     final_summary: Optional[str] = Field(default=None, description="Final summary sent to user")
     workflow_complete: bool = Field(default=False, description="Whether workflow is complete")
+
+
+class WorkflowResultStatus(str, Enum):
+    """Outcome status for a workflow run, returned to HTTP and Slack adapters."""
+
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    NOT_FOUND = "not_found"
+    FORBIDDEN = "forbidden"
+
+
+class WorkflowRunResult(BaseModel):
+    """Public, immutable result of EmailProcessingWorkflow.start() and .resume().
+
+    This is the boundary type between EmailProcessingWorkflow and its HTTP/Slack
+    callers. Flask serializes it to JSON via Pydantic's built-in
+    BaseModel.model_dump(); Slack adapters branch on the typed `status` field.
+    The workflow class is the only producer of this type; callers never
+    construct or mutate it.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    status: WorkflowResultStatus = Field(
+        ..., description="Outcome of the workflow run: PAUSED, COMPLETED, NOT_FOUND, or FORBIDDEN"
+    )
+    workflow_run_id: Optional[str] = Field(default=None, description="Workflow run ID for this run")
+    workflow_complete: bool = Field(default=False, description="Whether the workflow has fully completed")
+    awaiting_approval: bool = Field(default=False, description="Whether the run paused awaiting Slack approval")
+    error_message: Optional[str] = Field(
+        default=None, description="Human-readable error message for non-success statuses"
+    )

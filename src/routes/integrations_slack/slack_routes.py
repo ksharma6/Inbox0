@@ -5,6 +5,7 @@ from flask import jsonify, request
 from pydantic import ValidationError
 from slack_bolt import App as SlackApp
 from src.routes.integrations_slack.schemas import SlackActionBody
+from src.routes.web.schemas import ResumeAction
 from src.slack_handlers.workflow_bridge import resume_workflow_after_action
 
 INVALID_PAYLOAD_USER_MESSAGE = (
@@ -52,8 +53,21 @@ def register_slack_routes(app, slack_app: SlackApp, workflow):
             respond(text=INVALID_PAYLOAD_USER_MESSAGE)
             return
 
+        workflow_run_id = _workflow_run_id_from_action_value(parsed.actions[0].value)
+        logging.info(
+            "Slack approval action accepted: action_id=approve_draft workflow_run_id=%s slack_user_id=%s",
+            workflow_run_id,
+            parsed.user.id,
+            extra={
+                "event": "slack_action_received",
+                "action_id": "approve_draft",
+                "workflow_run_id": workflow_run_id,
+                "slack_user_id": parsed.user.id,
+            },
+        )
+
         workflow.draft_handler.handle_approval_action(ack, body, respond)
-        resume_workflow_after_action(_workflow_run_id_from_action_value(parsed.actions[0].value), respond, workflow)
+        resume_workflow_after_action(workflow_run_id, ResumeAction.APPROVE_DRAFT, respond, workflow)
 
     @slack_app.action("reject_draft")
     def reject_draft_action(ack, body, respond):
@@ -65,8 +79,21 @@ def register_slack_routes(app, slack_app: SlackApp, workflow):
             respond(text=INVALID_PAYLOAD_USER_MESSAGE)
             return
 
+        workflow_run_id = _workflow_run_id_from_action_value(parsed.actions[0].value)
+        logging.info(
+            "Slack approval action accepted: action_id=reject_draft workflow_run_id=%s slack_user_id=%s",
+            workflow_run_id,
+            parsed.user.id,
+            extra={
+                "event": "slack_action_received",
+                "action_id": "reject_draft",
+                "workflow_run_id": workflow_run_id,
+                "slack_user_id": parsed.user.id,
+            },
+        )
+
         workflow.draft_handler.handle_approval_action(ack, body, respond)
-        resume_workflow_after_action(_workflow_run_id_from_action_value(parsed.actions[0].value), respond, workflow)
+        resume_workflow_after_action(workflow_run_id, ResumeAction.REJECT_DRAFT, respond, workflow)
 
     @slack_app.action("save_draft")
     def save_draft_action(ack, body, respond):
@@ -78,8 +105,21 @@ def register_slack_routes(app, slack_app: SlackApp, workflow):
             respond(text=INVALID_PAYLOAD_USER_MESSAGE)
             return
 
+        workflow_run_id = _workflow_run_id_from_action_value(parsed.actions[0].value)
+        logging.info(
+            "Slack approval action accepted: action_id=save_draft workflow_run_id=%s slack_user_id=%s",
+            workflow_run_id,
+            parsed.user.id,
+            extra={
+                "event": "slack_action_received",
+                "action_id": "save_draft",
+                "workflow_run_id": workflow_run_id,
+                "slack_user_id": parsed.user.id,
+            },
+        )
+
         workflow.draft_handler.handle_approval_action(ack, body, respond)
-        resume_workflow_after_action(_workflow_run_id_from_action_value(parsed.actions[0].value), respond, workflow)
+        resume_workflow_after_action(workflow_run_id, ResumeAction.SAVE_DRAFT, respond, workflow)
 
     action_dispatch = {
         "approve_draft": approve_draft_action,
