@@ -1,21 +1,11 @@
-import uuid
 from dataclasses import dataclass
 from hmac import compare_digest
 from os import getenv
 
 from flask import jsonify, request
 from pydantic import ValidationError
-from src.models.agent_schemas import GmailAgentState
-from src.routes.web.schemas import (
-    ResumeAction,
-    ResumeWorkflowRequest,
-    StartWorkflowRequest,
-)
-from src.workflows.state_manager import (
-    extract_langgraph_state,
-    load_state_from_store,
-    save_state_to_store,
-)
+from src.models.agent_schemas import WorkflowResultStatus, WorkflowRunResult
+from src.routes.web.schemas import ResumeWorkflowRequest, StartWorkflowRequest
 
 API_KEY_HEADER = "X-Inbox0-API-Key"
 
@@ -41,6 +31,36 @@ def _authenticate_workflow_request():
     return AuthenticatedWorkflowUser(gmail_account_id=gmail_account_id, slack_user_id=slack_user_id), None
 
 
+def _result_to_response(result: WorkflowRunResult):
+    """Translate a WorkflowRunResult into a Flask (json, http_status) response.
+
+    Single mapping point between the workflow's typed result and the JSON wire
+    format. New result statuses get one new branch here and nowhere else.
+    """
+    if result.status is WorkflowResultStatus.NOT_FOUND:
+        return (
+            jsonify({"error": "no_paused_workflow", "message": result.error_message}),
+            404,
+        )
+    if result.status is WorkflowResultStatus.FORBIDDEN:
+        return jsonify({"error": "forbidden"}), 403
+    if result.status is WorkflowResultStatus.PAUSED:
+        return jsonify(
+            {
+                "status": "paused",
+                "awaiting_approval": True,
+                "workflow_run_id": result.workflow_run_id,
+            }
+        )
+    return jsonify(
+        {
+            "status": "completed",
+            "workflow_complete": result.workflow_complete,
+            "workflow_run_id": result.workflow_run_id,
+        }
+    )
+
+
 def register_flask_routes(app, workflow):
     @app.errorhandler(ValidationError)
     def handle_validation_error(error: ValidationError):
@@ -57,39 +77,11 @@ def register_flask_routes(app, workflow):
 
         StartWorkflowRequest.model_validate(request.get_json(silent=True) or {})
 
-        workflow_run_id = str(uuid.uuid4())
-        initial_state = GmailAgentState(
-            gmail_account_id=authenticated_user.gmail_account_id,
-            slack_user_id=authenticated_user.slack_user_id,
-            workflow_run_id=workflow_run_id,
+        result = workflow.start(
+            authenticated_user.gmail_account_id,
+            authenticated_user.slack_user_id,
         )
-
-        result_gen = workflow.workflow.stream(initial_state)
-
-        for state in result_gen:
-            if isinstance(state, dict):
-                actual_state = extract_langgraph_state(state)
-                state = GmailAgentState(**actual_state)
-
-            if state.awaiting_approval:
-                save_state_to_store(state)
-                return jsonify(
-                    {
-                        "status": "paused",
-                        "awaiting_approval": True,
-                        "workflow_run_id": state.workflow_run_id,
-                    }
-                )
-            final_state = state
-
-        save_state_to_store(final_state)
-        return jsonify(
-            {
-                "status": "completed",
-                "workflow_complete": final_state.workflow_complete,
-                "workflow_run_id": final_state.workflow_run_id,
-            }
-        )
+        return _result_to_response(result)
 
     @app.route("/resume_workflow", methods=["POST"])
     def resume_workflow():
@@ -99,50 +91,9 @@ def register_flask_routes(app, workflow):
 
         req = ResumeWorkflowRequest.model_validate(request.get_json(silent=True) or {})
 
-        state = load_state_from_store(req.workflow_run_id)
-
-        if state is None:
-            return (
-                jsonify(
-                    {
-                        "error": "no_paused_workflow",
-                        "message": f"No saved workflow state found for workflow_run_id={req.workflow_run_id}",
-                    }
-                ),
-                404,
-            )
-
-        if isinstance(state, dict):
-            actual_state = extract_langgraph_state(state)
-            state = GmailAgentState(**actual_state)
-
-        if state.gmail_account_id != authenticated_user.gmail_account_id:
-            return jsonify({"error": "forbidden"}), 403
-
-        state.awaiting_approval = False
-
-        if req.action is ResumeAction.APPROVE_DRAFT:
-            state.current_draft_index += 1
-            print(f"User approved draft {state.current_draft_index - 1}")
-        elif req.action is ResumeAction.REJECT_DRAFT:
-            if state.draft_responses and state.current_draft_index < len(state.draft_responses):
-                print(f"User rejected draft {state.current_draft_index}")
-            state.current_draft_index += 1
-        elif req.action is ResumeAction.SAVE_DRAFT:
-            print(f"User saved draft {state.current_draft_index}")
-            state.current_draft_index += 1
-
-        result_gen = workflow.workflow.stream(state)
-        for new_state in result_gen:
-            if isinstance(new_state, dict):
-                actual_state = extract_langgraph_state(new_state)
-                new_state = GmailAgentState(**actual_state)
-            final_state = new_state
-        save_state_to_store(final_state)
-        return jsonify(
-            {
-                "status": "resumed",
-                "workflow_complete": final_state.workflow_complete,
-                "workflow_run_id": final_state.workflow_run_id,
-            }
+        result = workflow.resume(
+            req.workflow_run_id,
+            authenticated_user.gmail_account_id,
+            req.action,
         )
+        return _result_to_response(result)

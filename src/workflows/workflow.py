@@ -9,11 +9,17 @@ from typing import Dict, List
 from langgraph.graph import END, StateGraph
 from src.agent.agent import Agent
 from src.gmail import GmailReader, GmailWriter
-from src.models.agent_schemas import GmailAgentState, ProcessRequestSchema
+from src.models.agent_schemas import (
+    GmailAgentState,
+    ProcessRequestSchema,
+    WorkflowResultStatus,
+    WorkflowRunResult,
+)
 from src.models.gmail import EmailSummary
+from src.routes.web.schemas import ResumeAction
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
 
-from .state_manager import save_state_to_store
+from .state_manager import extract_langgraph_state, load_state_from_store, save_state_to_store
 
 logger = logging.getLogger(__name__)
 
@@ -577,3 +583,128 @@ class EmailProcessingWorkflow:
             final_state = state
 
         return final_state
+
+    def _coerce_state(self, raw) -> GmailAgentState:
+        """Coerce one LangGraph stream emission into a GmailAgentState.
+
+        LangGraph's stream(...) yields per-node updates that are sometimes nested
+        dicts of the form {"node_name": {...state fields...}} and sometimes already
+        GmailAgentState instances. This helper normalizes both shapes so the rest
+        of the workflow class only ever handles GmailAgentState.
+        """
+        if isinstance(raw, GmailAgentState):
+            return raw
+        if isinstance(raw, dict):
+            return GmailAgentState(**extract_langgraph_state(raw))
+        raise TypeError(f"Unexpected state type from LangGraph stream: {type(raw)!r}")
+
+    def _stream_to_final_state(self, initial_state: GmailAgentState) -> GmailAgentState:
+        """Stream the compiled LangGraph until pause or completion.
+
+        Returns the final coerced GmailAgentState. Stops early if a streamed
+        state has awaiting_approval=True (pause point); otherwise consumes the
+        stream until exhaustion (workflow completion).
+        """
+        final_state = initial_state
+        for raw in self.workflow.stream(initial_state):
+            final_state = self._coerce_state(raw)
+            if final_state.awaiting_approval:
+                return final_state
+        return final_state
+
+    def _apply_resume_action(self, state: GmailAgentState, action: ResumeAction) -> GmailAgentState:
+        """Apply a user resume action to a paused workflow state.
+
+        Single source of truth for APPROVE_DRAFT, REJECT_DRAFT, and SAVE_DRAFT
+        transitions. All three currently advance current_draft_index and clear
+        awaiting_approval; the action type only affects logging today, but
+        keeping the dispatch here means future per-action behavior lands in one
+        place.
+        """
+        state.awaiting_approval = False
+        if action is ResumeAction.APPROVE_DRAFT:
+            logger.info("User approved draft %d", state.current_draft_index)
+            state.current_draft_index += 1
+        elif action is ResumeAction.REJECT_DRAFT:
+            logger.info("User rejected draft %d", state.current_draft_index)
+            state.current_draft_index += 1
+        elif action is ResumeAction.SAVE_DRAFT:
+            logger.info("User saved draft %d", state.current_draft_index)
+            state.current_draft_index += 1
+        else:
+            raise ValueError(f"Unknown ResumeAction: {action!r}")
+        return state
+
+    def _build_result(self, state: GmailAgentState) -> WorkflowRunResult:
+        """Build a WorkflowRunResult from a final state (paused or completed)."""
+        if state.awaiting_approval:
+            return WorkflowRunResult(
+                status=WorkflowResultStatus.PAUSED,
+                workflow_run_id=state.workflow_run_id,
+                awaiting_approval=True,
+            )
+        return WorkflowRunResult(
+            status=WorkflowResultStatus.COMPLETED,
+            workflow_run_id=state.workflow_run_id,
+            workflow_complete=state.workflow_complete,
+        )
+
+    def start(self, gmail_account_id: str, slack_user_id: str) -> WorkflowRunResult:
+        """Start a new workflow run.
+
+        Mints a fresh workflow_run_id, builds initial GmailAgentState, streams
+        the LangGraph until pause or completion, persists state to the store on
+        both outcomes, and returns a typed WorkflowRunResult for HTTP/Slack
+        adapters.
+
+        Args:
+            gmail_account_id: Authenticated Gmail account that owns this run.
+            slack_user_id: Slack user ID receiving workflow notifications.
+        """
+        workflow_run_id = str(uuid.uuid4())
+        self._seen_message_ids = set()
+        initial_state = GmailAgentState(
+            gmail_account_id=gmail_account_id,
+            slack_user_id=slack_user_id,
+            workflow_run_id=workflow_run_id,
+        )
+        final_state = self._stream_to_final_state(initial_state)
+        save_state_to_store(final_state)
+        return self._build_result(final_state)
+
+    def resume(
+        self,
+        workflow_run_id: str,
+        gmail_account_id: str,
+        action: ResumeAction,
+    ) -> WorkflowRunResult:
+        """Resume a paused workflow run.
+
+        Loads saved state by workflow_run_id, verifies the caller's
+        gmail_account_id matches the saved owner, applies the user action,
+        streams the workflow to the next pause or completion, persists state,
+        and returns a typed result.
+
+        Returns:
+            WorkflowRunResult with status=NOT_FOUND if no saved state exists,
+            status=FORBIDDEN if the saved owner does not match the caller, or
+            status=PAUSED / COMPLETED on successful resume.
+        """
+        state = load_state_from_store(workflow_run_id)
+        if state is None:
+            return WorkflowRunResult(
+                status=WorkflowResultStatus.NOT_FOUND,
+                workflow_run_id=workflow_run_id,
+                error_message=f"No saved workflow state found for workflow_run_id={workflow_run_id}",
+            )
+        if state.gmail_account_id != gmail_account_id:
+            return WorkflowRunResult(
+                status=WorkflowResultStatus.FORBIDDEN,
+                workflow_run_id=workflow_run_id,
+                error_message="Workflow run is owned by a different gmail_account_id",
+            )
+
+        state = self._apply_resume_action(state, action)
+        final_state = self._stream_to_final_state(state)
+        save_state_to_store(final_state)
+        return self._build_result(final_state)
