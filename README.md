@@ -197,7 +197,7 @@ Inbox0/
 ### How it works (architecture)
 
 <p align="center">
-  <img src="assets/inbox0_workflow_diagram.svg" alt="Inbox Zero Workflow Diagram" width="800" />
+  <img src="assets/inbox0_workflow_diagram.svg" alt="Inbox0 Workflow Diagram" width="800" />
 </p>
 
 1. Client calls `/start_workflow` with `X-Inbox0-API-Key`
@@ -245,54 +245,9 @@ Track v1.0 progress at the [v1.0 milestone page](https://github.com/ksharma6/Inb
 
 #### v1.0 system architecture
 
-```mermaid
-flowchart TB
-    Gmail[Gmail Inbox] -->|unread emails| Reader[GmailReader]
-    Reader --> Classifier{Triage Classifier<br/>distilBERT-class}
-
-    Classifier -->|noise / FYI| Skip[Skip - no draft]
-    Classifier -->|response needed| Retrieval
-
-    subgraph SemanticMemory[Two-Tier Semantic Memory]
-        direction LR
-        Redis[(Redis<br/>working-set cache)]
-        SQLite[(SQLite-vec<br/>persistent store)]
-        Redis <-->|promotion on read| SQLite
-    end
-
-    Retrieval[Query Rewriter<br/>+ Top-K Retrieval] --> SemanticMemory
-    SemanticMemory --> Drafter
-    Drafter[LLM Drafter] -->|draft + retrieved context| SlackHITL
-
-    SlackHITL{Slack Approval<br/>Approve / Edit / Discard}
-    SlackHITL -->|approve| Send[Gmail: Send]
-    SlackHITL -->|save| GmailDrafts[Gmail: Drafts folder]
-    SlackHITL -->|discard| Discard[Discard]
-
-    SlackHITL -.->|button events| Feedback
-    GmailDrafts -.->|folder state polling| Feedback
-    Send -.->|folder state polling| Feedback
-
-    subgraph FeedbackLoop[Feedback & Evaluation]
-        direction TB
-        Feedback[Implicit Feedback Collection]
-        EvalHarness[Pipeline Evaluation Harness]
-        Feedback -->|production signal| EvalHarness
-    end
-
-    EvalHarness -.->|baselines + deltas| Classifier
-    EvalHarness -.->|baselines + deltas| Retrieval
-    EvalHarness -.->|baselines + deltas| Drafter
-
-    classDef new fill:#4A9E88,stroke:#2A5F4F,color:#fff
-    classDef existing fill:#f0f0f0,stroke:#888,color:#333
-    classDef storage fill:#fff3e0,stroke:#e65100,color:#333
-    classDef terminal fill:#e8f5e9,stroke:#2e7d32,color:#333
-
-    class Classifier,Retrieval,SemanticMemory,Feedback,EvalHarness,Redis,SQLite new
-    class Reader,Drafter,SlackHITL existing
-    class Gmail,Send,GmailDrafts,Discard,Skip terminal
-```
+<p align="center">
+  <img src="assets/inbox0_v1_architecture.png" alt="Inbox0 v1.0 Diagram" width="800" />
+</p>
 
 The diagram shows the v1.0 target. Components in teal are new; gray are shipped today. Solid arrows are the request path; dashed arrows are the feedback and measurement path.
 
