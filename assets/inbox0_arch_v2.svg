@@ -1,0 +1,177 @@
+<svg viewBox="0 0 1280 1500" xmlns="http://www.w3.org/2000/svg" font-family="'DejaVu Sans', 'Liberation Sans', sans-serif">
+  <defs>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch" result="noise"/>
+      <feColorMatrix in="noise" type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.03"/></feComponentTransfer>
+      <feComposite operator="over" in2="SourceGraphic"/>
+    </filter>
+    <filter id="softshadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#2A2845" flood-opacity="0.15"/>
+    </filter>
+    <marker id="arrow" markerWidth="11" markerHeight="11" refX="8.5" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L9,4 L0,8 Z" fill="#514D7E"/>
+    </marker>
+    <marker id="arrowDash" markerWidth="11" markerHeight="11" refX="8.5" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L9,4 L0,8 Z" fill="#B07D2E"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="1500" fill="#F3F0DF"/>
+  <rect width="1280" height="1500" fill="#F3F0DF" filter="url(#grain)" opacity="0.6"/>
+
+  <!-- title -->
+  <text x="64" y="78" font-size="42" font-weight="bold" fill="#514D7E" letter-spacing="0.5">Inbox0<tspan font-size="26" font-weight="normal" fill="#7A7799" dy="0"> </tspan><tspan font-size="22" font-weight="normal" fill="#7A7799" baseline-shift="2">v</tspan><tspan font-size="34" font-weight="bold" fill="#3FA980">1.0</tspan><tspan font-size="34" font-weight="bold" fill="#514D7E"> Architecture</tspan></text>
+  <text x="66" y="110" font-size="19" fill="#7A7799">An evidence-driven agentic email pipeline. Every component ships with baselines and is measured against them.</text>
+  <line x1="64" y1="128" x2="1216" y2="128" stroke="#514D7E" stroke-width="1.5" opacity="0.35"/>
+
+  <!-- ============ MAIN VERTICAL PIPELINE (center) ============ -->
+
+  <!-- Gmail Inbox -->
+  <g filter="url(#softshadow)"><rect x="470" y="170" width="200" height="58" rx="10" fill="#FFFFFF" stroke="#514D7E" stroke-width="2.5"/></g>
+  <text x="570" y="205" font-size="19" font-weight="bold" fill="#3A3860" text-anchor="middle">Gmail Inbox</text>
+
+  <!-- GmailReader -->
+  <g filter="url(#softshadow)"><rect x="470" y="282" width="200" height="58" rx="10" fill="#FFFFFF" stroke="#514D7E" stroke-width="2.5"/></g>
+  <text x="570" y="317" font-size="19" font-weight="bold" fill="#3A3860" text-anchor="middle">GmailReader</text>
+
+  <!-- Triage Classifier (teal diamond) -->
+  <g filter="url(#softshadow)"><path d="M570,392 L705,452 L570,512 L435,452 Z" fill="#3FA980" stroke="#2A5F4F" stroke-width="2.5"/></g>
+  <text x="570" y="447" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Triage Classifier</text>
+  <text x="570" y="469" font-size="14" fill="#E4F3EC" text-anchor="middle">distilBERT-class</text>
+
+  <!-- Skip (terminal, far left) -->
+  <g filter="url(#softshadow)"><rect x="200" y="423" width="180" height="58" rx="10" fill="#EAF5EC" stroke="#2E7D32" stroke-width="2"/></g>
+  <text x="290" y="458" font-size="17" font-weight="bold" fill="#2E6B33" text-anchor="middle">Skip · no draft</text>
+
+  <!-- Query Rewriter (teal) -->
+  <g filter="url(#softshadow)"><rect x="460" y="562" width="220" height="64" rx="10" fill="#3FA980" stroke="#2A5F4F" stroke-width="2.5"/></g>
+  <text x="570" y="590" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Query Rewriter</text>
+  <text x="570" y="612" font-size="15" fill="#E4F3EC" text-anchor="middle">+ Top-K Retrieval</text>
+
+  <!-- Two-Tier Semantic Memory subgraph -->
+  <g filter="url(#softshadow)"><rect x="390" y="666" width="360" height="156" rx="14" fill="#EAF6F1" stroke="#3FA980" stroke-width="2.5"/></g>
+  <text x="570" y="696" font-size="16" font-weight="bold" fill="#2A5F4F" text-anchor="middle" letter-spacing="0.3">TWO-TIER SEMANTIC MEMORY</text>
+  <g filter="url(#softshadow)">
+    <path d="M418,728 a52,11 0 0,1 104,0 v44 a52,11 0 0,1 -104,0 Z" fill="#FBEED9" stroke="#C8821F" stroke-width="2"/>
+    <ellipse cx="470" cy="728" rx="52" ry="11" fill="#FDF6E9" stroke="#C8821F" stroke-width="2"/>
+  </g>
+  <text x="470" y="760" font-size="14" font-weight="bold" fill="#9A6518" text-anchor="middle">Redis</text>
+  <text x="470" y="778" font-size="12" fill="#9A6518" text-anchor="middle">working-set</text>
+  <g filter="url(#softshadow)">
+    <path d="M618,728 a52,11 0 0,1 104,0 v44 a52,11 0 0,1 -104,0 Z" fill="#FBEED9" stroke="#C8821F" stroke-width="2"/>
+    <ellipse cx="670" cy="728" rx="52" ry="11" fill="#FDF6E9" stroke="#C8821F" stroke-width="2"/>
+  </g>
+  <text x="670" y="760" font-size="14" font-weight="bold" fill="#9A6518" text-anchor="middle">SQLite-vec</text>
+  <text x="670" y="778" font-size="12" fill="#9A6518" text-anchor="middle">persistent</text>
+  <line x1="526" y1="750" x2="614" y2="750" stroke="#C8821F" stroke-width="2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="570" y="744" font-size="11" fill="#9A6518" text-anchor="middle">promotion</text>
+
+  <!-- LLM Drafter -->
+  <g filter="url(#softshadow)"><rect x="470" y="862" width="200" height="58" rx="10" fill="#FFFFFF" stroke="#514D7E" stroke-width="2.5"/></g>
+  <text x="570" y="897" font-size="19" font-weight="bold" fill="#3A3860" text-anchor="middle">LLM Drafter</text>
+
+  <!-- Slack Approval (diamond) -->
+  <g filter="url(#softshadow)"><path d="M570,962 L740,1027 L570,1092 L400,1027 Z" fill="#FFFFFF" stroke="#514D7E" stroke-width="2.5"/></g>
+  <text x="570" y="1020" font-size="18" font-weight="bold" fill="#3A3860" text-anchor="middle">Slack Approval</text>
+  <text x="570" y="1042" font-size="14" fill="#6A6790" text-anchor="middle">Approve / Edit / Discard</text>
+
+  <!-- three outputs -->
+  <g filter="url(#softshadow)"><rect x="250" y="1160" width="180" height="56" rx="10" fill="#EAF5EC" stroke="#2E7D32" stroke-width="2"/></g>
+  <text x="340" y="1194" font-size="16" font-weight="bold" fill="#2E6B33" text-anchor="middle">Gmail: Drafts</text>
+  <g filter="url(#softshadow)"><rect x="480" y="1160" width="180" height="56" rx="10" fill="#EAF5EC" stroke="#2E7D32" stroke-width="2"/></g>
+  <text x="570" y="1194" font-size="16" font-weight="bold" fill="#2E6B33" text-anchor="middle">Discard</text>
+  <g filter="url(#softshadow)"><rect x="710" y="1160" width="180" height="56" rx="10" fill="#EAF5EC" stroke="#2E7D32" stroke-width="2"/></g>
+  <text x="800" y="1194" font-size="16" font-weight="bold" fill="#2E6B33" text-anchor="middle">Gmail: Send</text>
+
+  <!-- Feedback & Eval subgraph (right) -->
+  <g filter="url(#softshadow)"><rect x="950" y="560" width="270" height="270" rx="14" fill="#EAF6F1" stroke="#3FA980" stroke-width="2.5"/></g>
+  <text x="1085" y="592" font-size="16" font-weight="bold" fill="#2A5F4F" text-anchor="middle" letter-spacing="0.3">FEEDBACK &amp; EVAL</text>
+  <g filter="url(#softshadow)"><rect x="978" y="616" width="214" height="68" rx="10" fill="#3FA980" stroke="#2A5F4F" stroke-width="2"/></g>
+  <text x="1085" y="646" font-size="15" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Implicit Feedback</text>
+  <text x="1085" y="666" font-size="15" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Collection</text>
+  <g filter="url(#softshadow)"><rect x="978" y="726" width="214" height="68" rx="10" fill="#3FA980" stroke="#2A5F4F" stroke-width="2"/></g>
+  <text x="1085" y="756" font-size="15" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Pipeline Eval</text>
+  <text x="1085" y="776" font-size="15" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Harness</text>
+  <line x1="1085" y1="684" x2="1085" y2="722" stroke="#2A5F4F" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="1140" y="708" font-size="11" fill="#2A5F4F" text-anchor="middle">signal</text>
+
+  <!-- ============ SOLID REQUEST-PATH EDGES ============ -->
+  <g stroke="#514D7E" stroke-width="2.5" fill="none">
+    <line x1="570" y1="228" x2="570" y2="278" marker-end="url(#arrow)"/>
+    <line x1="570" y1="340" x2="570" y2="388" marker-end="url(#arrow)"/>
+    <line x1="435" y1="452" x2="384" y2="452" marker-end="url(#arrow)"/>
+    <line x1="570" y1="512" x2="570" y2="558" marker-end="url(#arrow)"/>
+    <line x1="570" y1="626" x2="570" y2="662" marker-end="url(#arrow)"/>
+    <line x1="570" y1="822" x2="570" y2="858" marker-end="url(#arrow)"/>
+    <line x1="570" y1="920" x2="570" y2="958" marker-end="url(#arrow)"/>
+    <path d="M490,1065 C420,1110 370,1120 345,1156" marker-end="url(#arrow)"/>
+    <line x1="570" y1="1092" x2="570" y2="1156" marker-end="url(#arrow)"/>
+    <path d="M650,1065 C720,1110 770,1120 795,1156" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- solid edge labels -->
+  <g font-size="13" fill="#514D7E">
+    <rect x="512" y="244" width="116" height="20" fill="#F3F0DF"/>
+    <text x="570" y="259" text-anchor="middle">unread emails</text>
+    <rect x="392" y="430" width="78" height="20" fill="#F3F0DF"/>
+    <text x="431" y="445" text-anchor="middle">noise / FYI</text>
+    <rect x="582" y="530" width="120" height="20" fill="#F3F0DF"/>
+    <text x="642" y="545" text-anchor="middle">response needed</text>
+    <rect x="582" y="832" width="178" height="20" fill="#F3F0DF"/>
+    <text x="671" y="847" text-anchor="middle">draft + retrieved context</text>
+    <text x="430" y="1120" text-anchor="middle">save</text>
+    <text x="570" y="1136" text-anchor="middle">discard</text>
+    <text x="710" y="1120" text-anchor="middle">approve</text>
+  </g>
+
+  <!-- ============ DASHED FEEDBACK EDGES ============ -->
+  <!-- collected from outputs/slack into feedback collection, then harness baselines back to the 3 new components -->
+  <g stroke="#B07D2E" stroke-width="2" fill="none" stroke-dasharray="6 5">
+    <!-- slack button events -> feedback (up-right) -->
+    <path d="M740,1010 C880,950 920,720 974,668" marker-end="url(#arrowDash)"/>
+    <!-- three outcomes converge to a merge point below-right, then one line up to feedback collection -->
+    <!-- drafts -> merge -->
+    <path d="M430,1190 C620,1250 800,1255 950,1255"/>
+    <!-- discard -> merge -->
+    <path d="M660,1216 C760,1248 850,1255 950,1255"/>
+    <!-- send -> merge -->
+    <path d="M890,1200 C915,1225 935,1242 950,1255"/>
+    <!-- single merged line up to Feedback Collection -->
+    <path d="M950,1255 C1085,1255 1090,820 1085,690" marker-end="url(#arrowDash)"/>
+    <!-- harness -> classifier baselines -->
+    <path d="M978,760 C780,700 640,560 600,516" marker-end="url(#arrowDash)"/>
+    <!-- harness -> retrieval baselines -->
+    <path d="M978,740 C820,680 740,640 684,612" marker-end="url(#arrowDash)"/>
+    <!-- harness -> drafter baselines -->
+    <path d="M1085,794 C1085,850 760,890 674,895" marker-end="url(#arrowDash)"/>
+  </g>
+  <!-- merge point dot -->
+  <circle cx="950" cy="1255" r="5" fill="#B07D2E"/>
+  <g font-size="12" fill="#B07D2E">
+    <rect x="800" y="900" width="92" height="18" fill="#F3F0DF"/>
+    <text x="846" y="913" text-anchor="middle">button events</text>
+    <rect x="980" y="1010" width="160" height="18" fill="#F3F0DF"/>
+    <text x="1060" y="1023" text-anchor="middle">sent / draft / discard signal</text>
+    <rect x="700" y="640" width="118" height="18" fill="#F3F0DF"/>
+    <text x="759" y="653" text-anchor="middle">baselines + deltas</text>
+  </g>
+
+  <!-- legend -->
+  <g transform="translate(64,1300)">
+    <text x="0" y="0" font-size="15" font-weight="bold" fill="#514D7E" letter-spacing="0.5">LEGEND</text>
+    <rect x="0" y="16" width="26" height="18" rx="4" fill="#3FA980" stroke="#2A5F4F" stroke-width="1.5"/>
+    <text x="34" y="30" font-size="14" fill="#3A3860">New in v1.0</text>
+    <rect x="160" y="16" width="26" height="18" rx="4" fill="#FFFFFF" stroke="#514D7E" stroke-width="1.5"/>
+    <text x="194" y="30" font-size="14" fill="#3A3860">Shipped today</text>
+    <rect x="332" y="16" width="26" height="18" rx="4" fill="#EAF5EC" stroke="#2E7D32" stroke-width="1.5"/>
+    <text x="366" y="30" font-size="14" fill="#3A3860">Terminal</text>
+    <rect x="470" y="16" width="26" height="18" rx="4" fill="#FBEED9" stroke="#C8821F" stroke-width="1.5"/>
+    <text x="504" y="30" font-size="14" fill="#3A3860">Storage</text>
+    <line x1="620" y1="25" x2="662" y2="25" stroke="#514D7E" stroke-width="2.5"/>
+    <text x="670" y="30" font-size="14" fill="#3A3860">Request path</text>
+    <line x1="802" y1="25" x2="844" y2="25" stroke="#B07D2E" stroke-width="2" stroke-dasharray="6 5"/>
+    <text x="852" y="30" font-size="14" fill="#3A3860">Feedback / measurement</text>
+  </g>
+  <text x="64" y="1380" font-size="14" fill="#7A7799">github.com/ksharma6/Inbox0</text>
+</svg>
