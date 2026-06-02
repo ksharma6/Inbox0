@@ -157,41 +157,25 @@ Slack endpoints used by the app
 Inbox0/
   main.py                    # Flask + Slack app bootstrap
   src/
-    agent/
-      agent.py               # Tool-calling agent (OpenRouter + OpenAI SDK-compatible)
+    agent/agent.py           # Tool-calling agent (OpenRouter + OpenAI SDK-compatible)
     gmail/
       gmail_authenticator.py # OAuth flow (credentials.json/token.json)
       gmail_reader.py        # Read/search Gmail
       gmail_writer.py        # Create/send/save drafts
-      GCalendar.py           # Google Calendar integration helpers
-    models/
-      agent_schemas.py       # Pydantic schemas for Agent
-      gmail.py               # Gmail-related models
-      slack.py               # Slack-related models
-      toolfunction.py        # Tool/function schema models
+    models/                  # Pydantic schemas (agent, gmail, slack, tool functions)
     routes/
-      web/
-        flask_routes.py      # /start_workflow, /resume_workflow
-      integrations_slack/
-        slack_routes.py      # /slack/events, /slack/actions
+      web/flask_routes.py                # /start_workflow, /resume_workflow
+      integrations_slack/slack_routes.py # /slack/events, /slack/actions
     slack_handlers/
       draft_approval_handler.py  # Slack interactive approvals
       slack_authenticator.py     # Slack auth helpers
       workflow_bridge.py         # Resume workflow after Slack action
-    utils/
-      load_env.py            # .env loader
-      usage_tracker.py       # LLM usage tracking
+    utils/                   # .env loading, usage tracking, JSON log formatting
     workflows/
       workflow.py            # EmailProcessingWorkflow (LangGraph graph)
       factory.py             # Wiring Gmail, Slack, LLM
       state_manager.py       # Persist/restore workflow state
-  tests/
-    agent/
-      test_agent.py
-    logging/
-      test_slack_routes.py
-      test_draft_approval_handler_logging.py
-      test_main_logging_setup.py
+  tests/                     # pytest suite mirroring the src/ layout
 ```
 
 ### How it works (architecture)
