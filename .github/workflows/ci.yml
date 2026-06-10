@@ -45,7 +45,8 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
           fail_ci_if_error: true
+      - name: Upgrade pip before audit
+        run: uv pip install --upgrade pip
 
       - name: Security scan
-        # pip-audit currently reports CVE-2026-3219 for pip 26.0.1 with no fixed version.
-        run: uv run pip-audit --ignore-vuln CVE-2026-3219
+        run: uv run pip-audit

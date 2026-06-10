@@ -31,6 +31,7 @@ dependencies = [
 dev = [
     "pytest-mock>=3.15",
     "pytest-cov>=5.0",
+    "pip>=26.1.2",
     "pip-audit>=2.7",
     "ruff>=0.15.14",
     "pre-commit>=4.6.0",
