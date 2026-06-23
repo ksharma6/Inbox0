@@ -2,12 +2,16 @@
 
 **Status:** Proposed
 **Date:** 2026-05-17
+**Last Updated:** 2026-06-23
+**Revision:** Dashboard-first review surface; Slack demoted to legacy fallback. Shadow mode now instruments shared review-domain semantics rather than Slack-specific approval events.
 
 ---
 
 ## Context
 
 [001-gold_metrics.md](001-gold_metrics.md) commits Inbox0 to scoring v1.0 on three system-level signals (send rate, latency, and cost per draft) and to growing a labeled dataset toward 50 calibration examples before any threshold becomes load-bearing. None of that is reachable without a way to run the real pipeline on a real inbox and capture the outcomes durably, without sending email into the wild every time the agent thinks it should.
+
+The v1.0 product direction has also moved from Slack-first review to a browser-native dashboard as the preferred human-in-the-loop surface. Slack remains useful as a legacy fallback and proof of integration, but it should not define the evaluation boundary. Shadow mode therefore needs to attach to review-domain semantics - draft surfaced, review action recorded, Gmail write shadowed - rather than Slack-specific events.
 
 Today the gold-metric inputs are scattered:
 
@@ -26,6 +30,7 @@ These can't be joined into a per-draft record without a measurement layer that e
 2. Emit a durable, append-only record of every event needed to compute send rate, per-draft latency, per-batch latency, and per-draft cost from offline data alone.
 3. Be invisible to the user. The only visible difference between live and shadow mode is the button copy (the `Would …` framing); behavior the user can see — drafts generated and shown for review — is unchanged.
 4. Be instrumentation, not a fork. No parallel `DraftApprovalHandler`, no second workflow class, no copy-paste of the approval flow.
+5. Support the dashboard as the preferred product-facing review surface. Slack remains a legacy adapter, but shadow-mode semantics are shared across review surfaces.
 
 ## Non-goals
 
@@ -61,13 +66,12 @@ Reject has no Gmail side effect in either mode.
 flowchart TB
     Gmail[Gmail API] -->|read_emails| WF[EmailProcessingWorkflow]
     WF -->|LLM calls with run_id, stage, draft_id| Agent
-    WF -->|send_draft_for_approval| DAH[DraftApprovalHandler]
-    DAH -->|chat_postMessage| Slack
-    Slack -->|button click| Routes[slack_routes]
-    Routes -->|handle_approval_action| DAH
-    DAH -->|returns ApprovalOutcome| Routes
-    DAH -->|send_draft or save_draft| Writer{GmailWriter or ShadowGmailWriter}
-    Routes -->|record_approval_outcome| Recorder[(MetricRecorder)]
+    WF -->|surface draft for review| Dashboard[DashboardReviewSurface]
+    Dashboard -->|approve save reject| Actions[ReviewActionService]
+    Actions -->|approve save| Writer{GmailWriter or ShadowGmailWriter}
+    Actions -->|reject| Reject[RejectDraftAction]
+    Writer -->|returns ApprovalOutcome| Recorder[(MetricRecorder)]
+    Reject -->|returns ApprovalOutcome| Recorder
     WF -->|workflow and draft events| Recorder
     Agent -->|llm_call_completed| Recorder
     Writer -->|email_send_shadowed| Recorder
@@ -77,10 +81,10 @@ Four pieces hold this together:
 
 1. **`AppMode` flag.** Read from `INBOX0_SHADOW_MODE` at boot. Default `LIVE`.
 2. **`ShadowGmailWriter`.** Subclass of `GmailWriter` that overrides the three write paths — `send_draft`, `send_reply`, and `save_draft` — to no-op and emit an event. The factory injects this instead of `GmailWriter` when the flag is on.
-3. **`ApprovalOutcome` boundary type.** `DraftApprovalHandler.handle_approval_action` returns an outcome object instead of `None`. The Slack route layer translates it into a `MetricRecorder.record_approval_outcome(outcome)` call. The handler stays focused on Slack; persistence lives in the eval layer.
+3. **`ApprovalOutcome` boundary type.** Review actions return an outcome object instead of mutating hidden UI-specific state. The dashboard and Slack adapters both call the same review-action boundary; persistence lives in the eval layer.
 4. **`MetricRecorder`.** Append-only JSONL sink at `metrics/events.jsonl`. One method `record(event_name, **fields)` plus typed helpers per event.
 
-The factory wires all of this. Without `INBOX0_SHADOW_MODE` set, the wiring resolves to today's exact dependency graph minus the (cheap, optional) recorder calls.
+The factory wires all of this. Without `INBOX0_SHADOW_MODE` set, the wiring preserves today's live Gmail behavior while still allowing cheap, optional recorder calls.
 
 ---
 
@@ -90,16 +94,18 @@ New code lives under `src/eval/`:
 
 - `app_mode.py` — `AppMode(LIVE, SHADOW)`; `get_app_mode()` reads `INBOX0_SHADOW_MODE`.
 - `metric_recorder.py` — append-only JSONL sink. Side-effect-isolated so retries are safe per [reliability/001](../reliability/001-idempotent-write-side-retry-strategy-for-mail-and-slack.md).
-- `metric_events.py` — frozen Pydantic models for `WorkflowStarted`, `EmailIngested`, `DraftSurfaced`, `ApprovalOutcomeRecorded`, `LLMCallCompleted`, `EmailSendShadowed`, `WorkflowCompleted`. All carry `workflow_run_id`; event-specific events also carry `draft_id` and/or `email_id` and `thread_id`.
-- `approval_outcome.py` — frozen dataclass with `workflow_run_id`, `draft_id`, `slack_user_id`, `email_id`, `thread_id`, `action: ResumeAction`, `user_intent: Literal["would_send", "would_save", "would_reject"]`, `success`, `gmail_message_id`, `gmail_draft_id`, `error`, `timestamp`. In shadow mode `gmail_message_id` and `gmail_draft_id` are the synthetic `shadow_*` IDs, since no real send or save occurs.
+- `metric_events.py` — frozen Pydantic models for `WorkflowStarted`, `EmailIngested`, `DraftSurfaced`, `ReviewActionRecorded`, `LLMCallCompleted`, `EmailSendShadowed`, `WorkflowCompleted`. All carry `workflow_run_id`; event-specific events also carry `draft_id` and/or `email_id` and `thread_id`.
+- `approval_outcome.py` — frozen dataclass with `workflow_run_id`, `draft_id`, `reviewer_id`, `review_surface: Literal["dashboard", "slack"]`, `email_id`, `thread_id`, `action: ResumeAction`, `user_intent: Literal["would_send", "would_save", "would_reject"]`, `success`, `gmail_message_id`, `gmail_draft_id`, `error`, `timestamp`. In shadow mode `gmail_message_id` and `gmail_draft_id` are the synthetic `shadow_*` IDs, since no real send or save occurs.
+- `review_action_service.py` — shared approval boundary called by dashboard routes and Slack routes. Owns send/save/reject semantics and returns `ApprovalOutcome`.
 - `shadow_gmail_writer.py` — subclass of `GmailWriter`. Overrides `send_draft`, `send_reply`, and `save_draft`.
 
 Touched code:
 
 - `src/workflows/factory.py` — mode-aware wiring.
-- `src/slack_handlers/draft_approval_handler.py` — return `ApprovalOutcome`; accept `app_mode` and use it to choose the Send button label; stash `email_id` and `thread_id` in `pending_drafts[draft_id]` so the outcome can carry them.
-- `src/routes/integrations_slack/slack_routes.py` — call `recorder.record_approval_outcome(outcome)` between the handler call and `resume_workflow_after_action(...)`.
-- `src/workflows/workflow.py` — emit `workflow_started`, `email_ingested` (per email), `draft_surfaced` (after `chat_postMessage` success), `workflow_completed`.
+- `src/routes/web/flask_routes.py` — expose dashboard review actions that call `ReviewActionService` and record the returned outcome.
+- `src/slack_handlers/draft_approval_handler.py` — become a Slack adapter around the shared review-action boundary; accept `app_mode` and use it to choose legacy fallback button labels.
+- `src/routes/integrations_slack/slack_routes.py` — call the same `ReviewActionService` as the dashboard path, then resume workflow after the returned outcome.
+- `src/workflows/workflow.py` — emit `workflow_started`, `email_ingested` (per email), `draft_surfaced` (after draft review surface success), `workflow_completed`.
 - `src/agent/agent.py` — `set_context(**kwargs)` / `clear_context()` plus `record_llm_call` emit inside `_timed_completion`.
 - `src/utils/usage_tracker.py` — `log_usage` accepts optional `workflow_run_id`, `stage`, `draft_id` (backward-compatible defaults).
 - `.env.example` — `INBOX0_SHADOW_MODE=false` with comment.
@@ -107,9 +113,19 @@ Touched code:
 
 ---
 
-## Slack button copy
+## Review surface copy
 
-All three buttons take the `Would …` framing in shadow mode, so the review surface reads uniformly as a "what would you do" prompt rather than a live action bar.
+All three review actions take the `Would …` framing in shadow mode, so the review surface reads uniformly as a "what would you do" prompt rather than a live action bar.
+
+The dashboard is the canonical v1.0 surface:
+
+| Action  | Live label           | Shadow label        |
+|---------|----------------------|---------------------|
+| approve | Approve & Send       | Would Send          |
+| save    | Save Draft           | Would Save Draft    |
+| reject  | Reject               | Would Reject        |
+
+Slack mirrors the same semantics as a legacy fallback:
 
 | Action  | Live label           | Shadow label        |
 |---------|----------------------|---------------------|
@@ -117,7 +133,7 @@ All three buttons take the `Would …` framing in shadow mode, so the review sur
 | save    | 💾 Save Draft        | 👻 Would Save Draft |
 | reject  | ❌ Reject            | 👻 Would Reject     |
 
-`action_id` and `value` strings are identical in both modes so the route dispatch and `ResumeAction` mapping are unchanged.
+Action identifiers are identical in both modes so route dispatch and `ResumeAction` mapping are unchanged.
 
 The `Would …` framing is now literally accurate: in shadow mode all three actions are intent-only, so no button performs a real Gmail side effect (per the shadow-behavior table above). Self-reported edit magnitude (a follow-up "minor / major edits" prompt) was considered and dropped — see Limitations.
 
@@ -125,10 +141,10 @@ The `Would …` framing is now literally accurate: in shadow mode all three acti
 
 ## Latency anchors
 
-001 defines latency as "email arrival in Gmail → draft appearing in Slack." The header `Date` is the sender's clock, so the closest defensible anchors Inbox0 owns are:
+001 defines latency as "email arrival in Gmail → draft appearing in the review surface." The header `Date` is the sender's clock, so the closest defensible anchors Inbox0 owns are:
 
 - `email_first_seen_at` — set when `_read_unread_emails` fetches a message. Recorded on an `email_ingested` event keyed by `email_id`.
-- `draft_surfaced_at` — the `chat_postMessage` success in `send_draft_for_approval`. Recorded on a `draft_surfaced` event keyed by `draft_id` + `email_id`.
+- `draft_surfaced_at` — the successful handoff to the dashboard review state, or to Slack in legacy fallback mode. Recorded on a `draft_surfaced` event keyed by `draft_id` + `email_id`.
 
 Per-draft latency = `draft_surfaced.surfaced_at - email_ingested.ingested_at`, joined on `email_id`. Per-batch latency = `workflow_completed.ts - workflow_started.ts`. Both views from 001 are computable.
 
@@ -189,7 +205,7 @@ The conclusion: shadow mode is genuinely good at exactly one thing — **cold st
 
 ## Open questions
 
-1. ~~Should all three buttons say `Would …` in shadow mode?~~ **Resolved:** yes. All three use the `Would …` framing for a uniform review surface, and in shadow mode all three are intent-only (no Gmail side effect), so the framing is literally accurate.
+1. ~~Should all three review actions say `Would …` in shadow mode?~~ **Resolved:** yes. All three use the `Would …` framing for a uniform review surface, and in shadow mode all three are intent-only (no Gmail side effect), so the framing is literally accurate.
 2. Should `email_ingested` events fire per-email or per-batch with a list? Per-email is simpler to join; per-batch is cheaper at high volume. Default: per-email until volume forces a change.
 3. When `INBOX0_SHADOW_MODE` is unset, do we still construct a `MetricRecorder` and emit events (so the harness can backfill from live data later), or skip emission entirely? Default proposed: still construct, still emit. The recorder is cheap and the parallelism is the whole point.
 
@@ -197,4 +213,4 @@ The conclusion: shadow mode is genuinely good at exactly one thing — **cold st
 
 ## Decision
 
-Implement shadow mode as a five-module evaluation layer under `src/eval/` plus a small number of returning-an-outcome changes to existing handlers. The flag is `INBOX0_SHADOW_MODE`, defaults off. When on, the three Gmail write paths (`send_draft`, `send_reply`, `save_draft`) become no-ops and the approval buttons take the `Would …` framing; shadow mode touches Gmail only for the read at the top of the workflow. Everything else — drafts generated, drafts shown for review, LLM calls made — runs the live code path so the metrics collected reflect the live system, not a diagnostic of itself. Edit distance and true send rate, which require a real Gmail side effect, are explicitly out of scope here and belong to the [003 harness](003-eval_harness.md).
+Implement shadow mode as an evaluation layer under `src/eval/` plus a shared review-action boundary used by both the dashboard and Slack fallback. The flag is `INBOX0_SHADOW_MODE`, defaults off. When on, the three Gmail write paths (`send_draft`, `send_reply`, `save_draft`) become no-ops and review actions take the `Would …` framing; shadow mode touches Gmail only for the read at the top of the workflow. Everything else — drafts generated, drafts shown for review, LLM calls made — runs the live code path so the metrics collected reflect the live system, not a diagnostic of itself. Because the dashboard is the preferred final product-facing destination, shadow mode is designed around review-domain semantics rather than Slack-specific events. Slack remains supported as a legacy adapter, but it does not define the instrumentation boundary. Edit distance and true send rate, which require a real Gmail side effect, are explicitly out of scope here and belong to the [003 harness](003-eval_harness.md).
