@@ -6,7 +6,7 @@ Pygments==2.20.0
 Werkzeug==3.1.8
 beautifulsoup4==4.15.0
 google-api-python-client==2.197.0
-google-auth-oauthlib==1.3.1
+google-auth-oauthlib==1.4.0
 langchain==1.3.11
 openai==2.43.0
 openrouter==0.10.0
