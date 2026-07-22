@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=82.0.1"]
+requires = ["setuptools>=83.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -12,13 +12,13 @@ readme = "README.md"
 dependencies = [
     "flask>=3.1",
     "pydantic>=2.13.4",
-    "openai>=2.38.0",
-    "openrouter>=0.9.1",
-    "langchain>=1.3.2",
-    "beautifulsoup4>=4.14",
-    "google-api-python-client>=2.196.0",
+    "openai>=2.43.0",
+    "openrouter>=0.10.0",
+    "langchain>=1.3.9",
+    "beautifulsoup4>=4.15.0",
+    "google-api-python-client>=2.197.0",
     "google-auth-oauthlib>=1.4.0",
-    "redis>=7.0",
+    "redis>=8.0.1",
     "slack_bolt>=1.28",
     "tenacity>=9.1",
     "tiktoken>=0.13.0",
@@ -31,8 +31,9 @@ dependencies = [
 dev = [
     "pytest-mock>=3.15",
     "pytest-cov>=5.0",
-    "pip-audit>=2.7",
-    "ruff>=0.15.14",
+    "pip>=26.1.2",
+    "pip-audit>=2.10.1",
+    "ruff>=0.15.20",
     "pre-commit>=4.6.0",
 ]
 
