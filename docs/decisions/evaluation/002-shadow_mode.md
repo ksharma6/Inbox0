@@ -1,4 +1,4 @@
-# 002 — Shadow Mode: Collection-Only Evaluation Layer
+# 002 — Shadow Mode: Safe Candidate-Dataset Collection
 
 **Status:** Proposed
 **Date:** 2026-05-17
@@ -7,7 +7,7 @@
 
 ## Context
 
-[001-gold_metrics.md](001-gold_metrics.md) commits Inbox0 to scoring v1.0 on three system-level signals (send rate, latency, and cost per draft) and to growing a labeled dataset toward 50 calibration examples before any threshold becomes load-bearing. None of that is reachable without a way to run the real pipeline on a real inbox and capture the outcomes durably, without sending email into the wild every time the agent thinks it should.
+[001-gold_metrics.md](001-gold_metrics.md) commits Inbox0 to scoring v1.0 on three system-level signals (send rate, latency, and cost per draft) and to growing a labeled dataset toward 50 calibration examples before any threshold becomes load-bearing. The immediate need is a safe way to run the real pipeline on a real inbox and retain candidate evaluation examples without sending email into the wild every time the agent thinks it should.
 
 Today the gold-metric inputs are scattered:
 
@@ -16,20 +16,21 @@ Today the gold-metric inputs are scattered:
 - LLM token usage is appended to `usage_tracker.json` with `timestamp`, `model`, `prompt_tokens`, `completion_tokens` — no `workflow_run_id`, no `draft_id`, no stage label.
 - "Draft surfaced in Slack" and "email arrived" timestamps exist only as the byproduct of `chat_postMessage` and `email.date`, which is the sender's clock, not Inbox0's ingest time.
 
-These can't be joined into a per-draft record without a measurement layer that exists before the components it scores. Shadow mode is that layer. This ADR scopes the **collection layer only**. Reporters, edit-distance gates, and the LLM-judge threshold calibration described in 001 are explicit follow-ons.
+These can't be joined into a per-draft record without a collection layer that exists before the components it scores. Shadow mode is that layer. Its primary output is a durable candidate dataset containing the input/context used by the pipeline, the generated draft, the user's action, and operational telemetry. A shadow example is not automatically a gold example: `Would Send` is an intent label, while a saved draft that is later edited or sent can eventually become a drafted-vs-sent gold pair. This ADR scopes the **collection layer only**. Reporters, downstream Gmail observation, edit-distance gates, and the LLM-judge threshold calibration described in 001 are explicit follow-ons.
 
 ---
 
 ## Goals
 
-1. Run the existing workflow against a real inbox with one safety property: **no email is sent**, even when the user clicks "Approve".
-2. Emit a durable, append-only record of every event needed to compute send rate, per-draft latency, per-batch latency, and per-draft cost from offline data alone.
-3. Be invisible to the user. The only visible difference between live and shadow mode is the button copy (the `Would …` framing); behavior the user can see — drafts generated and shown for review — is unchanged.
+1. Run the existing workflow against a real inbox with one safety property: **no outbound email is sent**, even when the user clicks "Would Send".
+2. Emit a durable, append-only candidate record containing the pipeline input/context, generated draft, user action, join keys, and every event needed to compute per-draft latency, per-batch latency, and per-draft cost offline.
+3. Allow the user to keep a useful generated response by saving it as a real Gmail draft, without requiring shadow mode to observe or score what happens to that draft later.
 4. Be instrumentation, not a fork. No parallel `DraftApprovalHandler`, no second workflow class, no copy-paste of the approval flow.
 
 ## Non-goals
 
 - Computing the gold metrics inside the app. The math from 001 (cost rates, edit distance, LLM judge) lives in the offline harness.
+- Polling Gmail to determine whether a saved draft was edited or sent. Shadow mode retains the generated body, thread ID, and Gmail draft ID so that capability can be added later.
 - Replacing `UsageTracker`. It coexists with `MetricRecorder` in this PR; collapsing them is a separate cleanup.
 - A pricing table. Tokens and model name are recorded; `(tokens × rate)` is the harness's job so a stale price doesn't get baked into the runtime.
 - File rotation for `metrics/*.jsonl`. Start unbounded; revisit when volume warrants.
@@ -44,12 +45,10 @@ The Gmail-side actions split three ways:
 |-----------------|--------------------------------------------|------------------------------------------------------------|
 | `send_draft`    | `messages().send()` — email leaves         | **No-op.** Return `{"id": "shadow_msg_<uuid>"}`. Emit event |
 | `send_reply`    | `messages().send()` — email leaves         | **No-op.** Same shape as above                              |
-| `save_draft`    | `drafts().create()` — drafts folder write  | **No-op.** Record `would_save` intent only; no folder write |
+| `save_draft`    | `drafts().create()` — drafts folder write  | **Unchanged.** Create a real Gmail draft and retain its ID  |
 | `create_draft`  | Local base64 encode, no API call           | Unchanged                                                   |
 
-Shadow mode touches Gmail for nothing: both send paths and the save path are intercepted, so the only Gmail interaction is the read at the top of the workflow. `create_draft` stays live because it is a pure local base64 encode with no API call — it produces the draft body the user reviews, but never reaches Gmail.
-
-This is a deliberate change from an earlier cut that kept `save_draft` live to harvest a real Gmail draft ID for edit distance. Edit distance now belongs entirely to the [003 harness](003-eval_harness.md) (retrospective replay and live folder polling), so shadow mode no longer needs a live save, and a fully side-effect-free shadow mode is simpler to reason about and matches the uniform `Would …` button framing.
+The safety boundary is outbound email, not all Gmail writes. Shadow mode intercepts both send paths, while an explicit `Save Draft` action performs the same non-sending Gmail write as live mode. This lets useful shadow output enter the user's normal workflow and preserves the association between the generated body and a real Gmail draft without requiring edit-distance or folder-polling machinery in this ADR.
 
 Reject has no Gmail side effect in either mode.
 
@@ -76,7 +75,7 @@ flowchart TB
 Four pieces hold this together:
 
 1. **`AppMode` flag.** Read from `INBOX0_SHADOW_MODE` at boot. Default `LIVE`.
-2. **`ShadowGmailWriter`.** Subclass of `GmailWriter` that overrides the three write paths — `send_draft`, `send_reply`, and `save_draft` — to no-op and emit an event. The factory injects this instead of `GmailWriter` when the flag is on.
+2. **`ShadowGmailWriter`.** Subclass of `GmailWriter` that overrides the two outbound write paths — `send_draft` and `send_reply` — to no-op and emit an event. It inherits the real `save_draft` behavior. The factory injects this instead of `GmailWriter` when the flag is on.
 3. **`ApprovalOutcome` boundary type.** `DraftApprovalHandler.handle_approval_action` returns an outcome object instead of `None`. The Slack route layer translates it into a `MetricRecorder.record_approval_outcome(outcome)` call. The handler stays focused on Slack; persistence lives in the eval layer.
 4. **`MetricRecorder`.** Append-only JSONL sink at `metrics/events.jsonl`. One method `record(event_name, **fields)` plus typed helpers per event.
 
@@ -90,16 +89,16 @@ New code lives under `src/eval/`:
 
 - `app_mode.py` — `AppMode(LIVE, SHADOW)`; `get_app_mode()` reads `INBOX0_SHADOW_MODE`.
 - `metric_recorder.py` — append-only JSONL sink. Side-effect-isolated so retries are safe per [reliability/001](../reliability/001-idempotent-write-side-retry-strategy-for-mail-and-slack.md).
-- `metric_events.py` — frozen Pydantic models for `WorkflowStarted`, `EmailIngested`, `DraftSurfaced`, `ApprovalOutcomeRecorded`, `LLMCallCompleted`, `EmailSendShadowed`, `WorkflowCompleted`. All carry `workflow_run_id`; event-specific events also carry `draft_id` and/or `email_id` and `thread_id`.
-- `approval_outcome.py` — frozen dataclass with `workflow_run_id`, `draft_id`, `slack_user_id`, `email_id`, `thread_id`, `action: ResumeAction`, `user_intent: Literal["would_send", "would_save", "would_reject"]`, `success`, `gmail_message_id`, `gmail_draft_id`, `error`, `timestamp`. In shadow mode `gmail_message_id` and `gmail_draft_id` are the synthetic `shadow_*` IDs, since no real send or save occurs.
-- `shadow_gmail_writer.py` — subclass of `GmailWriter`. Overrides `send_draft`, `send_reply`, and `save_draft`.
+- `metric_events.py` — frozen Pydantic models for `WorkflowStarted`, `EmailIngested`, `DraftCandidateRecorded`, `DraftSurfaced`, `ApprovalOutcomeRecorded`, `LLMCallCompleted`, `EmailSendShadowed`, `WorkflowCompleted`. All carry `workflow_run_id`; event-specific events also carry `draft_id` and/or `email_id` and `thread_id`. `DraftCandidateRecorded` durably stores the source input/thread context used by the pipeline and the generated body so the JSONL output is a usable candidate dataset rather than telemetry alone.
+- `approval_outcome.py` — frozen dataclass with `workflow_run_id`, `draft_id`, `slack_user_id`, `email_id`, `thread_id`, `action: ResumeAction`, `user_intent: Literal["would_send", "save_draft", "would_reject"]`, `success`, `gmail_message_id`, `gmail_draft_id`, `error`, `timestamp`. In shadow mode, send intent receives a synthetic `shadow_msg_*` ID; a successful save carries the real Gmail draft ID; reject carries neither.
+- `shadow_gmail_writer.py` — subclass of `GmailWriter`. Overrides `send_draft` and `send_reply`; inherits `save_draft`.
 
 Touched code:
 
 - `src/workflows/factory.py` — mode-aware wiring.
 - `src/slack_handlers/draft_approval_handler.py` — return `ApprovalOutcome`; accept `app_mode` and use it to choose the Send button label; stash `email_id` and `thread_id` in `pending_drafts[draft_id]` so the outcome can carry them.
 - `src/routes/integrations_slack/slack_routes.py` — call `recorder.record_approval_outcome(outcome)` between the handler call and `resume_workflow_after_action(...)`.
-- `src/workflows/workflow.py` — emit `workflow_started`, `email_ingested` (per email), `draft_surfaced` (after `chat_postMessage` success), `workflow_completed`.
+- `src/workflows/workflow.py` — emit `workflow_started`, `email_ingested` (per email), `draft_candidate_recorded` (input/context plus generated body), `draft_surfaced` (after `chat_postMessage` success), `workflow_completed`.
 - `src/agent/agent.py` — `set_context(**kwargs)` / `clear_context()` plus `record_llm_call` emit inside `_timed_completion`.
 - `src/utils/usage_tracker.py` — `log_usage` accepts optional `workflow_run_id`, `stage`, `draft_id` (backward-compatible defaults).
 - `.env.example` — `INBOX0_SHADOW_MODE=false` with comment.
@@ -109,17 +108,17 @@ Touched code:
 
 ## Slack button copy
 
-All three buttons take the `Would …` framing in shadow mode, so the review surface reads uniformly as a "what would you do" prompt rather than a live action bar.
+The two actions shadow mode intercepts use `Would …` framing. Saving keeps its live label because it creates a real Gmail draft.
 
 | Action  | Live label           | Shadow label        |
 |---------|----------------------|---------------------|
 | approve | ✅ Approve & Send    | 👻 Would Send       |
-| save    | 💾 Save Draft        | 👻 Would Save Draft |
+| save    | 💾 Save Draft        | 💾 Save Draft       |
 | reject  | ❌ Reject            | 👻 Would Reject     |
 
 `action_id` and `value` strings are identical in both modes so the route dispatch and `ResumeAction` mapping are unchanged.
 
-The `Would …` framing is now literally accurate: in shadow mode all three actions are intent-only, so no button performs a real Gmail side effect (per the shadow-behavior table above). Self-reported edit magnitude (a follow-up "minor / major edits" prompt) was considered and dropped — see Limitations.
+The labels state the consequence accurately: `Would Send` and `Would Reject` record intent, while `Save Draft` performs a real, non-sending Gmail write. Self-reported edit magnitude (a follow-up "minor / major edits" prompt) was considered and dropped — see Limitations.
 
 ---
 
@@ -163,19 +162,19 @@ These are deferred to follow-on PRs and tracked separately so this collection la
 
 ## Limitations: shadow mode is a cold-start instrument, not the harness
 
-First, what shadow mode earns outright: **latency and cost per draft are fully measured here, with no caveat.** Both are read from the real pipeline executing — per-stage token counts and wall-clock from ingest to draft-surfaced — and neither depends on whether a send happens or on what the user clicks. Two of the three gold metrics are therefore first-class in shadow mode.
+First, what shadow mode earns outright: **a candidate evaluation dataset plus latency and cost per draft.** The candidate record contains the pipeline input/context, generated output, and user action. Latency and cost are read from the real pipeline executing — per-stage token counts and wall-clock from ingest to draft-surfaced — and neither depends on whether a send happens.
 
 The limitation is the third. The send rate (and the edit distance folded into it) in [001](001-gold_metrics.md) is defined as an **outcome** signal: was the email *sent*, how much did the user *change* it before sending. Shadow mode, by design, intercepts the consequence. So it can only ever collect **intent** — a `Would Send` click, not a sent email. That gap is real and worth stating plainly:
 
 - **Intent overestimates send rate, but in a known direction.** Clicking `Would Send` costs nothing. Under zero stakes the user rubber-stamps drafts that are merely "good enough" — ones they would tighten or kill if the email were actually going out under their name. This low-stakes bias is systematic and *optimistic*: it inflates the rate rather than scrambling it. That directionality is what makes the signal salvageable — shadow-mode send rate is an upper bound now, and once the [003 harness](003-eval_harness.md) produces real sends, the gap between `Would Send` rate and true send rate can be estimated and shadow data carried forward as a debiased estimator rather than discarded.
-- **Edit distance is uncapturable in shadow mode entirely.** Because both send and save are no-ops, nothing reaches Gmail — there is no sent body and no saved draft to diff the generated draft against. The richest cell in the 001 rubric — "sent as-is vs heavily rewritten" — is simply not observable here. It is recovered in the [003 harness](003-eval_harness.md), via retrospective replay against real sent mail and, later, live folder polling.
-- **The "Save-then-what" branches collapse.** 001's rubric forks on downstream behavior (saved → sent as-is = pass; saved → never sent but manual reply = fail/drafter). Those events all occur *after* the button and require a real Gmail draft. Shadow mode truncates observation at the click.
+- **Edit distance is deferred, not discarded.** `Would Send` produces no sent body and therefore no drafted-vs-sent pair. `Save Draft`, however, retains the generated body, thread ID, and real Gmail draft ID. A later folder observer can use those fields to recover an edited or sent body. Building that observer and computing the diff belong to the [003 harness](003-eval_harness.md), not this collection layer.
+- **The "Save-then-what" branches remain unscored here.** 001's rubric forks on downstream behavior (saved → sent as-is = pass; saved → never sent but manual reply = fail/drafter). Shadow mode creates the draft and preserves the join keys, but deliberately does not poll Gmail or classify the downstream outcome.
 
-A consequence worth recording for the button design: self-reported edit magnitude (e.g. a follow-up "minor edits / major edits" prompt) was considered and rejected. A prospective, subjective self-report is a noisy proxy for a number the 003 harness can compute precisely from drafted-vs-sent diffs. Shadow mode keeps three plain buttons (`Would Send`, `Would Save`, `Would Reject`), captures intent only, and defers all edit-magnitude measurement to the harness.
+A consequence worth recording for the button design: self-reported edit magnitude (e.g. a follow-up "minor edits / major edits" prompt) was considered and rejected. A prospective, subjective self-report is a noisy proxy for a number the 003 harness can compute precisely from drafted-vs-sent diffs. Shadow mode keeps three plain buttons (`Would Send`, `Save Draft`, `Would Reject`), records intent for the shadowed actions and a real draft ID for saves, and defers all edit-magnitude measurement to the harness.
 
-**One conflation to avoid.** Shadow mode's "first 50 samples" are not the same 50 that 001 calibrates thresholds on. 001's calibration is run explicitly on the first ~50 *drafted-vs-sent pairs* — it needs a sent body to diff and judge. Shadow mode produces drafted-*only* samples (`{draft, context, intent, latency, cost}`), because nothing is ever sent. Those are a real dataset and a real head start — enough to baseline latency and cost and to eyeball draft quality with a judge that scores the draft in isolation — but they are a different corpus serving a different job than the drafted-vs-sent pairs the send-rate gates require. Treating the shadow 50 as if it clears 001's calibration bar would claim a gate that has not been passed; the drafted-vs-sent corpus comes from 003.
+**One conflation to avoid.** Shadow examples are candidate examples, not automatically gold examples. A `Would Send` click is an intent label, not a sent outcome. The first ~50 examples used by 001 to calibrate edit-distance thresholds must still be drafted-vs-sent pairs. Saved shadow drafts can later contribute such pairs if a folder observer captures their final sent bodies, but merely creating the draft does not clear the calibration bar.
 
-The conclusion: shadow mode is genuinely good at exactly one thing — **cold start with zero risk.** It nails latency and cost, captures intent as a deliberately optimistic (and later debiasable) upper bound, and refuses to manufacture a behavioral signal — saved drafts included — that zero stakes would only contaminate. It produces an initial intent-labeled set so the harness does not begin from an empty table. It is not, and should not be treated as, the evaluation harness. The behavioral ground truth lives in [003-eval_harness.md](003-eval_harness.md): retrospective replay against the user's own sent mail for a deterministic, repeatable gold target, graduating to live mode plus Gmail folder polling for the true send-rate and edit-distance signals.
+The conclusion: shadow mode is a **safe candidate-dataset bootstrap with no outbound-email risk.** It captures real pipeline inputs and outputs, user intent, latency, and cost. An explicit save creates a useful Gmail draft and preserves the linkage needed for future drafted-vs-sent measurement, but shadow mode does not perform that measurement itself. Behavioral ground truth remains the responsibility of [003-eval_harness.md](003-eval_harness.md).
 
 ---
 
@@ -189,7 +188,7 @@ The conclusion: shadow mode is genuinely good at exactly one thing — **cold st
 
 ## Open questions
 
-1. ~~Should all three buttons say `Would …` in shadow mode?~~ **Resolved:** yes. All three use the `Would …` framing for a uniform review surface, and in shadow mode all three are intent-only (no Gmail side effect), so the framing is literally accurate.
+1. ~~Should all three buttons say `Would …` in shadow mode?~~ **Resolved:** no. `Would Send` and `Would Reject` are intent-only. `Save Draft` keeps its live label and creates a real Gmail draft.
 2. Should `email_ingested` events fire per-email or per-batch with a list? Per-email is simpler to join; per-batch is cheaper at high volume. Default: per-email until volume forces a change.
 3. When `INBOX0_SHADOW_MODE` is unset, do we still construct a `MetricRecorder` and emit events (so the harness can backfill from live data later), or skip emission entirely? Default proposed: still construct, still emit. The recorder is cheap and the parallelism is the whole point.
 
@@ -197,4 +196,4 @@ The conclusion: shadow mode is genuinely good at exactly one thing — **cold st
 
 ## Decision
 
-Implement shadow mode as a five-module evaluation layer under `src/eval/` plus a small number of returning-an-outcome changes to existing handlers. The flag is `INBOX0_SHADOW_MODE`, defaults off. When on, the three Gmail write paths (`send_draft`, `send_reply`, `save_draft`) become no-ops and the approval buttons take the `Would …` framing; shadow mode touches Gmail only for the read at the top of the workflow. Everything else — drafts generated, drafts shown for review, LLM calls made — runs the live code path so the metrics collected reflect the live system, not a diagnostic of itself. Edit distance and true send rate, which require a real Gmail side effect, are explicitly out of scope here and belong to the [003 harness](003-eval_harness.md).
+Implement shadow mode as a five-module evaluation layer under `src/eval/` plus a small number of returning-an-outcome changes to existing handlers. The flag is `INBOX0_SHADOW_MODE`, defaults off. When on, outbound Gmail writes (`send_draft` and `send_reply`) become no-ops; `Save Draft` remains live and returns a real Gmail draft ID. The collection layer durably records the pipeline input/context, generated body, user action, join keys, latency, and token usage. Everything else — drafts generated, drafts shown for review, LLM calls made — runs the live code path so the candidate dataset reflects the live system. Downstream Gmail polling, edit distance, and true send-rate computation remain explicitly out of scope and belong to the [003 harness](003-eval_harness.md).
