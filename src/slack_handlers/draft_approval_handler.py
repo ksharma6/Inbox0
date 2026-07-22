@@ -8,13 +8,14 @@ from slack_bolt import App
 from slack_bolt.context.ack import Ack
 from slack_bolt.context.say import Say
 from slack_sdk.errors import SlackApiError
+from src.eval.app_mode import AppMode, get_app_mode
 from src.gmail.gmail_writer import GmailWriter
 
 
 def get_draft_handler(slack_app):
     """Get or create the draft approval handler"""
     gmail_writer = GmailWriter(os.getenv("TOKENS_PATH"))
-    draft_handler = DraftApprovalHandler(gmail_writer=gmail_writer, slack_app=slack_app)
+    draft_handler = DraftApprovalHandler(gmail_writer=gmail_writer, slack_app=slack_app, app_mode=get_app_mode())
     return draft_handler
 
 
@@ -31,16 +32,20 @@ class DraftApprovalHandler:
         DRAFT_TIMEOUT_HOURS (int): Drafts expire after set number of hours (24 hours by default)
     """
 
-    def __init__(self, gmail_writer: GmailWriter, slack_app: App):
+    def __init__(self, gmail_writer: GmailWriter, slack_app: App, app_mode: AppMode = AppMode.LIVE):
         """
         Initialize the draft approval handler.
 
         parameters:
             gmail_writer (GmailWriter): Initialized GmailWriter instance
             slack_app (App): Initialized Slack App instance
+            app_mode (AppMode): Execution mode. In SHADOW, the intercepted
+                actions use "Would ..." button labels. Defaults to LIVE so the
+                handler behaves exactly as before unless shadow mode is opted in.
         """
         self.gmail_writer = gmail_writer
         self.slack_app = slack_app
+        self.app_mode = app_mode
         self.pending_drafts = {}
         self.draft_timeouts = {}
         self.DRAFT_TIMEOUT_HOURS = 24
@@ -129,6 +134,10 @@ class DraftApprovalHandler:
                 return f"{action_type}:{workflow_run_id}:{draft_id}"
             return f"{action_type}_{draft_id}"
 
+        is_shadow = self.app_mode.is_shadow
+        approve_label = "👻 Would Send" if is_shadow else "✅ Approve & Send"
+        reject_label = "👻 Would Reject" if is_shadow else "❌ Reject"
+
         # define slack blocks for approval message
         blocks = [
             {"type": "section", "text": {"type": "mrkdwn", "text": text}},
@@ -140,7 +149,7 @@ class DraftApprovalHandler:
                         "type": "button",
                         "text": {
                             "type": "plain_text",
-                            "text": "✅ Approve & Send",
+                            "text": approve_label,
                             "emoji": True,
                         },
                         "style": "primary",
@@ -151,7 +160,7 @@ class DraftApprovalHandler:
                         "type": "button",
                         "text": {
                             "type": "plain_text",
-                            "text": "❌ Reject",
+                            "text": reject_label,
                             "emoji": True,
                         },
                         "style": "danger",

@@ -2,6 +2,7 @@ import os
 
 from slack_bolt import App as SlackApp
 from src.agent.agent import Agent
+from src.eval.app_mode import get_app_mode
 from src.gmail import GmailReader, GmailWriter
 from src.models.agent_schemas import AgentSchema
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
@@ -31,6 +32,9 @@ def get_workflow(slack_app: SlackApp | None = None) -> EmailProcessingWorkflow:
         OPENROUTER_MODEL or LLM_MODEL: Optional model override.
         SITE_URL: Optional site URL reported to OpenRouter.
         APP_NAME: Optional app name reported to OpenRouter.
+        SHADOW_MODE: Optional. When truthy (1/true/yes/on), wires a
+            `ShadowGmailWriter` so outbound sends are no-ops. Unset or any other
+            value runs live (real sends). See `src/eval/app_mode.py`.
 
     Returns:
         EmailProcessingWorkflow: A configured workflow instance with Gmail,
@@ -48,7 +52,17 @@ def get_workflow(slack_app: SlackApp | None = None) -> EmailProcessingWorkflow:
         ```
     """
     gmail_token = os.getenv("TOKENS_PATH")
-    gmail_writer = GmailWriter(gmail_token)
+
+    app_mode = get_app_mode()
+    if app_mode.is_shadow:
+        # Imported lazily so the default (live) path never depends on the shadow
+        # module existing.
+        from src.eval.shadow_gmail_writer import ShadowGmailWriter
+
+        gmail_writer = ShadowGmailWriter(gmail_token)
+    else:
+        gmail_writer = GmailWriter(gmail_token)
+
     gmail_reader = GmailReader(gmail_token)
 
     if slack_app is None:
@@ -57,7 +71,7 @@ def get_workflow(slack_app: SlackApp | None = None) -> EmailProcessingWorkflow:
             signing_secret=os.getenv("SLACK_SIGNING_SECRET"),
         )
 
-    draft_handler = DraftApprovalHandler(slack_app=slack_app, gmail_writer=gmail_writer)
+    draft_handler = DraftApprovalHandler(slack_app=slack_app, gmail_writer=gmail_writer, app_mode=app_mode)
     agent_schema = AgentSchema()
     agent = Agent(schema=agent_schema)
 
