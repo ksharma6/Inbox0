@@ -9,7 +9,9 @@ from slack_bolt.context.ack import Ack
 from slack_bolt.context.say import Say
 from slack_sdk.errors import SlackApiError
 from src.eval.app_mode import AppMode, get_app_mode
+from src.eval.human_decision import HumanDecision
 from src.gmail.gmail_writer import GmailWriter
+from src.routes.web.schemas import ResumeAction
 
 
 def get_draft_handler(slack_app):
@@ -51,18 +53,29 @@ class DraftApprovalHandler:
         self.DRAFT_TIMEOUT_HOURS = 24
 
     def send_draft_for_approval(
-        self, draft: Dict, slack_user_id: str, workflow_run_id: Optional[str] = None
+        self,
+        draft: Dict,
+        slack_user_id: str,
+        workflow_run_id: Optional[str] = None,
+        email_id: Optional[str] = None,
+        thread_id: Optional[str] = None,
     ) -> Optional[str]:
-        """
-        Send a draft email for approval with interactive buttons.
+        """Post a draft to Slack with approval buttons and track it as pending.
 
-        parameters:
-            draft (Dict): Gmail draft dictionary from create_draft()
-            slack_user_id (str): Slack user ID to send approval request to
-            workflow_run_id (Optional[str]): Workflow run ID to resume when the user acts on the draft
+        Args:
+            draft (Dict): Gmail draft dictionary produced by create_draft().
+            slack_user_id (str): Slack user ID the approval request is sent to.
+            workflow_run_id (Optional[str]): Workflow run ID to resume when the
+                user acts on the draft. Defaults to None.
+            email_id (Optional[str]): Identifier of the source email, stored with
+                the pending draft so later actions can reference it. Defaults to
+                None.
+            thread_id (Optional[str]): Identifier of the source thread, stored
+                with the pending draft. Defaults to None.
 
         Returns:
-            str: The draft ID for tracking, or None if failed to send draft for approval
+            Optional[str]: The generated draft ID used to track the draft, or
+                None if the approval message could not be sent.
         """
         try:
             draft_id = str(uuid.uuid4())
@@ -75,6 +88,8 @@ class DraftApprovalHandler:
                 "decoded_draft": decoded_draft,
                 "slack_user_id": slack_user_id,
                 "workflow_run_id": workflow_run_id,
+                "email_id": email_id,
+                "thread_id": thread_id,
                 "created_at": datetime.now(),
                 "status": "pending",
             }
@@ -195,14 +210,18 @@ class DraftApprovalHandler:
 
         return {"text": text, "blocks": blocks}
 
-    def handle_approval_action(self, ack: Ack, body: Dict, say: Say) -> None:
-        """
-        Handle approval/rejection button clicks.
+    def handle_approval_action(self, ack: Ack, body: Dict, say: Say) -> Optional[HumanDecision]:
+        """Handle an approve, reject, or save button click on a draft.
 
-        parameters:
-            ack (Ack): Slack acknowledgment function
-            body (Dict): Request body containing action details
-            say (Say): Slack say function for responses
+        Args:
+            ack (Ack): Slack acknowledgment function, called immediately.
+            body (Dict): Slack request body containing the action and user.
+            say (Say): Slack say function used to reply to the user.
+
+        Returns:
+            Optional[HumanDecision]: The decision produced by the action, or None
+                when no action was recorded (the draft is missing or expired, the
+                action is unknown, or an error occurred).
         """
         try:
             ack()
@@ -220,35 +239,85 @@ class DraftApprovalHandler:
             # Check if draft exists and is still pending
             if draft_id not in self.pending_drafts:
                 say(text="❌ This draft has expired or doesn't exist.")
-                return
+                return None
 
             # Check if draft has expired
             if datetime.now() > self.draft_timeouts[draft_id]:
                 say(text="❌ This draft has expired.")
                 self._cleanup_draft(draft_id)
-                return
+                return None
 
             # Handle different actions
             if action_type == "approve":
-                self._handle_approve(draft_id, user_id, say)
+                return self._handle_approve(draft_id, user_id, say)
             elif action_type == "reject":
-                self._handle_reject(draft_id, user_id, say)
+                return self._handle_reject(draft_id, user_id, say)
             elif action_type == "save":
-                self._handle_save(draft_id, user_id, say)
+                return self._handle_save(draft_id, user_id, say)
             else:
                 say(text="❌ Unknown action.")
+                return None
 
         except Exception as e:
             logging.exception("Error handling approval action: %s", e)
             say(text="❌ An error occurred while processing your request.")
+            return None
 
-    def _handle_approve(self, draft_id: str, user_id: str, say: Say) -> None:
-        """Handle draft approval request
+    def _build_decision(
+        self,
+        action: ResumeAction,
+        draft_id: str,
+        user_id: str,
+        success: bool,
+        gmail_message_id: Optional[str] = None,
+        gmail_draft_id: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> HumanDecision:
+        """Assemble a HumanDecision for an action taken on a pending draft.
 
-        parameters:
-            draft_id (str): Unique draft identifier
-            user_id (str): Slack user ID
-            say (Say): Slack say function for responses
+        Reads the workflow run, email, and thread identifiers stored with the
+        pending draft (when present) and combines them with the outcome fields.
+
+        Args:
+            action (ResumeAction): The action the user took on the draft.
+            draft_id (str): Identifier of the draft acted on.
+            user_id (str): Slack user ID of the acting user.
+            success (bool): Whether the action completed successfully.
+            gmail_message_id (Optional[str]): Sent message ID, when a send
+                occurred. Defaults to None.
+            gmail_draft_id (Optional[str]): Saved draft ID, when a save occurred.
+                Defaults to None.
+            error (Optional[str]): Error message when the action failed. Defaults
+                to None.
+
+        Returns:
+            HumanDecision: The assembled decision record.
+        """
+        draft_data = self.pending_drafts.get(draft_id, {})
+        return HumanDecision.from_resume_action(
+            action,
+            workflow_run_id=draft_data.get("workflow_run_id"),
+            draft_id=draft_id,
+            slack_user_id=user_id,
+            email_id=draft_data.get("email_id"),
+            thread_id=draft_data.get("thread_id"),
+            success=success,
+            gmail_message_id=gmail_message_id,
+            gmail_draft_id=gmail_draft_id,
+            error=error,
+        )
+
+    def _handle_approve(self, draft_id: str, user_id: str, say: Say) -> HumanDecision:
+        """Send the approved draft and return the resulting decision.
+
+        Args:
+            draft_id (str): Identifier of the draft being approved.
+            user_id (str): Slack user ID of the user who approved the draft.
+            say (Say): Slack say function used to reply to the user.
+
+        Returns:
+            HumanDecision: Record of the approve action, carrying the sent
+                message ID on success or an error message on failure.
         """
         logging.info("Draft approved - draft_id=%s user_id=%s", draft_id, user_id)
         try:
@@ -265,21 +334,47 @@ class DraftApprovalHandler:
                 draft_data["approved_by"] = user_id
                 draft_data["approved_at"] = datetime.now()
 
-            else:
-                say(text="❌ Failed to send email. Please try again.")
-                self._cleanup_draft(draft_id)
+                return self._build_decision(
+                    ResumeAction.APPROVE_DRAFT,
+                    draft_id,
+                    user_id,
+                    success=True,
+                    gmail_message_id=result.get("id"),
+                )
+
+            say(text="❌ Failed to send email. Please try again.")
+            decision = self._build_decision(
+                ResumeAction.APPROVE_DRAFT,
+                draft_id,
+                user_id,
+                success=False,
+                error="send_draft returned no result",
+            )
+            self._cleanup_draft(draft_id)
+            return decision
 
         except Exception as e:
             logging.exception("Error approving draft: %s", e)
             say(text="❌ An error occurred while sending the email.")
+            return self._build_decision(
+                ResumeAction.APPROVE_DRAFT,
+                draft_id,
+                user_id,
+                success=False,
+                error=str(e),
+            )
 
-    def _handle_reject(self, draft_id: str, user_id: str, say: Say) -> None:
-        """Handle draft rejection request
+    def _handle_reject(self, draft_id: str, user_id: str, say: Say) -> HumanDecision:
+        """Mark the draft as rejected and return the resulting decision.
 
-        parameters:
-            draft_id (str): Unique draft identifier
-            user_id (str): Slack user ID
-            say (Say): Slack say function for responses
+        Args:
+            draft_id (str): Identifier of the draft being rejected.
+            user_id (str): Slack user ID of the user who rejected the draft.
+            say (Say): Slack say function used to reply to the user.
+
+        Returns:
+            HumanDecision: Record of the reject action, with no Gmail identifiers
+                and an error message only if rejection handling failed.
         """
         logging.info("Draft rejected - draft_id=%s user_id=%s", draft_id, user_id)
         try:
@@ -293,31 +388,60 @@ class DraftApprovalHandler:
             draft_data["rejected_by"] = user_id
             draft_data["rejected_at"] = datetime.now()
 
+            return self._build_decision(ResumeAction.REJECT_DRAFT, draft_id, user_id, success=True)
+
         except Exception as e:
             logging.exception("Error rejecting draft: %s", e)
             say(text="❌ An error occurred while rejecting the draft.")
+            return self._build_decision(
+                ResumeAction.REJECT_DRAFT,
+                draft_id,
+                user_id,
+                success=False,
+                error=str(e),
+            )
 
-    def _handle_save(self, draft_id: str, user_id: str, say: Say) -> None:
-        """Handle draft save request
+    def _handle_save(self, draft_id: str, user_id: str, say: Say) -> HumanDecision:
+        """Save the draft to Gmail and return the resulting decision.
 
-        parameters:
-            draft_id (str): Unique draft identifier
-            user_id (str): Slack user ID
-            say (Say): Slack say function for responses
+        Args:
+            draft_id (str): Identifier of the draft being saved.
+            user_id (str): Slack user ID of the user who saved the draft.
+            say (Say): Slack say function used to reply to the user.
+
+        Returns:
+            HumanDecision: Record of the save action, carrying the saved Gmail
+                draft ID on success or an error message on failure.
         """
         logging.info("Draft saved - draft_id=%s user_id=%s", draft_id, user_id)
         try:
             draft_data = self.pending_drafts[draft_id]
             draft = draft_data["draft"]
-            self.gmail_writer.save_draft(draft)
+            saved_draft = self.gmail_writer.save_draft(draft)
 
             self._update_original_message(draft_id, "✅ *SAVED*", "success")
 
             say(text="✅ Email draft saved successfully.")
 
+            gmail_draft_id = saved_draft.get("id") if saved_draft else None
+            return self._build_decision(
+                ResumeAction.SAVE_DRAFT,
+                draft_id,
+                user_id,
+                success=saved_draft is not None,
+                gmail_draft_id=gmail_draft_id,
+            )
+
         except Exception as e:
             logging.exception("Error handling save request: %s", e)
             say(text="❌ An error occurred while processing save request.")
+            return self._build_decision(
+                ResumeAction.SAVE_DRAFT,
+                draft_id,
+                user_id,
+                success=False,
+                error=str(e),
+            )
 
     def _update_original_message(self, draft_id: str, status_text: str, color: str) -> None:
         """Update the user with status message, removing original approval message and buttons
