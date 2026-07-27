@@ -42,6 +42,20 @@ def _workflow_run_id_from_action_value(value: str) -> str | None:
     return None
 
 
+def _record_decision(workflow, decision) -> None:
+    """Record a human decision on the workflow's event log when both are present.
+
+    Args:
+        workflow: The workflow whose ``event_log`` receives the decision. When it
+            has no event log (e.g. outside shadow mode), nothing is recorded.
+        decision (Optional[HumanDecision]): The decision returned by the draft
+            approval handler, or None when there is nothing to record.
+    """
+    event_log = getattr(workflow, "event_log", None)
+    if decision is not None and event_log is not None:
+        event_log.record_human_decision(decision)
+
+
 def register_slack_routes(app, slack_app: SlackApp, workflow):
     @slack_app.action("approve_draft")
     def approve_draft_action(ack, body, respond):
@@ -66,7 +80,8 @@ def register_slack_routes(app, slack_app: SlackApp, workflow):
             },
         )
 
-        workflow.draft_handler.handle_approval_action(ack, body, respond)
+        decision = workflow.draft_handler.handle_approval_action(ack, body, respond)
+        _record_decision(workflow, decision)
         resume_workflow_after_action(workflow_run_id, ResumeAction.APPROVE_DRAFT, respond, workflow)
 
     @slack_app.action("reject_draft")
@@ -92,7 +107,8 @@ def register_slack_routes(app, slack_app: SlackApp, workflow):
             },
         )
 
-        workflow.draft_handler.handle_approval_action(ack, body, respond)
+        decision = workflow.draft_handler.handle_approval_action(ack, body, respond)
+        _record_decision(workflow, decision)
         resume_workflow_after_action(workflow_run_id, ResumeAction.REJECT_DRAFT, respond, workflow)
 
     @slack_app.action("save_draft")
@@ -118,7 +134,8 @@ def register_slack_routes(app, slack_app: SlackApp, workflow):
             },
         )
 
-        workflow.draft_handler.handle_approval_action(ack, body, respond)
+        decision = workflow.draft_handler.handle_approval_action(ack, body, respond)
+        _record_decision(workflow, decision)
         resume_workflow_after_action(workflow_run_id, ResumeAction.SAVE_DRAFT, respond, workflow)
 
     action_dispatch = {

@@ -3,6 +3,7 @@ import os
 from slack_bolt import App as SlackApp
 from src.agent.agent import Agent
 from src.eval.app_mode import get_app_mode
+from src.eval.event_log import EventLog
 from src.gmail import GmailReader, GmailWriter
 from src.models.agent_schemas import AgentSchema
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
@@ -75,9 +76,13 @@ def get_workflow(slack_app: SlackApp | None = None) -> EmailProcessingWorkflow:
     agent_schema = AgentSchema()
     agent = Agent(schema=agent_schema)
 
+    # Only shadow mode records events for now; live-mode collection is deferred.
+    event_log = EventLog() if app_mode.is_shadow else None
+
     return EmailProcessingWorkflow(
         gmail_reader=gmail_reader,
         gmail_writer=gmail_writer,
         draft_handler=draft_handler,
         agent=agent,
+        event_log=event_log,
     )

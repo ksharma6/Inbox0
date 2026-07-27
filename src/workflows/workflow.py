@@ -4,10 +4,11 @@ import logging
 import os
 import uuid
 from collections import Counter
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from langgraph.graph import END, StateGraph
 from src.agent.agent import Agent
+from src.eval.event_log import EventLog
 from src.gmail import GmailReader, GmailWriter
 from src.models.agent_schemas import (
     GmailAgentState,
@@ -34,6 +35,8 @@ class EmailProcessingWorkflow:
         gmail_writer: GmailWriter object
         draft_handler: DraftApprovalHandler object
         openrouter_client: OpenRouter object
+        event_log: Optional EventLog used to record metric events. When None, no
+            events are recorded.
 
     Example:
         workflow = EmailProcessingWorkflow(
@@ -51,11 +54,13 @@ class EmailProcessingWorkflow:
         gmail_writer: GmailWriter,
         draft_handler: DraftApprovalHandler,
         agent: Agent,
+        event_log: Optional[EventLog] = None,
     ):
         self.gmail_reader = gmail_reader
         self.gmail_writer = gmail_writer
         self.draft_handler = draft_handler
         self.agent = agent
+        self.event_log = event_log
         self._seen_message_ids: set = set()
 
         self.workflow = self._create_workflow()
@@ -360,6 +365,8 @@ class EmailProcessingWorkflow:
             draft=draft_info["draft"],
             slack_user_id=state.slack_user_id,
             workflow_run_id=state.workflow_run_id,
+            email_id=draft_info["email_id"],
+            thread_id=draft_info["original_email"].thread_id,
         )
 
         if draft_id:
