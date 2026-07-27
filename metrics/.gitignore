@@ -1,0 +1,2 @@
+# Metric event data is a local, append-only dataset and is not committed.
+*.jsonl
