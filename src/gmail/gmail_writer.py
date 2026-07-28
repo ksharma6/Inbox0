@@ -125,12 +125,16 @@ class GmailWriter:
         """
         return self._email_message_decoder(draft)
 
-    def send_draft(self, draft):
+    def send_draft(self, draft, workflow_run_id=None, draft_id=None):
         """
         Send a draft email message to recipient. Sent message details are reflected in users Gmail sent folder.
 
         Args:
             draft (dict): The draft email message dictionary in the format of {"raw": "base64_encoded_message"}.
+            workflow_run_id (Optional[str]): Identifier of the originating workflow run. Accepted for a
+                consistent send interface across writer implementations; unused when sending live. Defaults to None.
+            draft_id (Optional[str]): Identifier of the originating draft. Accepted for a consistent send
+                interface across writer implementations; unused when sending live. Defaults to None.
 
         Returns:
             dict: The sent message details.
@@ -141,7 +145,7 @@ class GmailWriter:
 
         return send_message
 
-    def send_reply(self, original_message, reply_message):
+    def send_reply(self, original_message, reply_message, workflow_run_id=None, draft_id=None):
         """
         Send a reply to an original email message given the thread id.
 
@@ -151,6 +155,10 @@ class GmailWriter:
                 {"name": "Subject", "value": "Test Email"}, {"name": "Message-ID", "value": "1234567890"},
                 {"name": "To", "value": "recipient@example.com"}]}}.
             reply_message (str): The reply message body.
+            workflow_run_id (Optional[str]): Identifier of the originating workflow run. Accepted for a
+                consistent send interface across writer implementations; unused when sending live. Defaults to None.
+            draft_id (Optional[str]): Identifier of the originating draft. Accepted for a consistent send
+                interface across writer implementations; unused when sending live. Defaults to None.
 
         Returns:
             dict: The sent message details.
