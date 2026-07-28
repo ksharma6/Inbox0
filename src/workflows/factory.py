@@ -55,12 +55,16 @@ def get_workflow(slack_app: SlackApp | None = None) -> EmailProcessingWorkflow:
     gmail_token = os.getenv("TOKENS_PATH")
 
     app_mode = get_app_mode()
+
+    # Only shadow mode records events for now; live-mode collection is deferred.
+    event_log = EventLog() if app_mode.is_shadow else None
+
     if app_mode.is_shadow:
         # Imported lazily so the default (live) path never depends on the shadow
         # module existing.
         from src.eval.shadow_gmail_writer import ShadowGmailWriter
 
-        gmail_writer = ShadowGmailWriter(gmail_token)
+        gmail_writer = ShadowGmailWriter(gmail_token, event_log=event_log)
     else:
         gmail_writer = GmailWriter(gmail_token)
 
@@ -71,9 +75,6 @@ def get_workflow(slack_app: SlackApp | None = None) -> EmailProcessingWorkflow:
             token=os.getenv("SLACK_BOT_TOKEN"),
             signing_secret=os.getenv("SLACK_SIGNING_SECRET"),
         )
-
-    # Only shadow mode records events for now; live-mode collection is deferred.
-    event_log = EventLog() if app_mode.is_shadow else None
 
     draft_handler = DraftApprovalHandler(slack_app=slack_app, gmail_writer=gmail_writer, app_mode=app_mode)
     agent_schema = AgentSchema()
