@@ -15,7 +15,21 @@ from src.routes.web.schemas import ResumeAction
 
 
 def get_draft_handler(slack_app):
-    """Get or create the draft approval handler"""
+    """Create a draft approval handler wired to a live Gmail writer.
+
+    .. deprecated::
+        Legacy constructor retained for backward compatibility. It always uses a
+        plain ``GmailWriter`` and does not wire an ``EventLog``, so it ignores
+        shadow mode regardless of ``SHADOW_MODE``. Use
+        ``src.workflows.factory.get_workflow`` instead, which builds a mode-aware
+        writer and the shared event log.
+
+    Args:
+        slack_app (App): Initialized Slack App instance passed to the handler.
+
+    Returns:
+        DraftApprovalHandler: A handler backed by a live Gmail writer.
+    """
     gmail_writer = GmailWriter(os.getenv("TOKENS_PATH"))
     draft_handler = DraftApprovalHandler(gmail_writer=gmail_writer, slack_app=slack_app, app_mode=get_app_mode())
     return draft_handler
@@ -324,7 +338,11 @@ class DraftApprovalHandler:
             draft_data = self.pending_drafts[draft_id]
             draft = draft_data["draft"]
 
-            result = self.gmail_writer.send_draft(draft)
+            result = self.gmail_writer.send_draft(
+                draft,
+                workflow_run_id=draft_data.get("workflow_run_id"),
+                draft_id=draft_id,
+            )
 
             if result:
                 self._update_original_message(draft_id, "✅ *APPROVED & SENT*", "success")
