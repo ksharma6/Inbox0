@@ -72,12 +72,12 @@ def get_workflow(slack_app: SlackApp | None = None) -> EmailProcessingWorkflow:
             signing_secret=os.getenv("SLACK_SIGNING_SECRET"),
         )
 
-    draft_handler = DraftApprovalHandler(slack_app=slack_app, gmail_writer=gmail_writer, app_mode=app_mode)
-    agent_schema = AgentSchema()
-    agent = Agent(schema=agent_schema)
-
     # Only shadow mode records events for now; live-mode collection is deferred.
     event_log = EventLog() if app_mode.is_shadow else None
+
+    draft_handler = DraftApprovalHandler(slack_app=slack_app, gmail_writer=gmail_writer, app_mode=app_mode)
+    agent_schema = AgentSchema()
+    agent = Agent(schema=agent_schema, event_log=event_log)
 
     return EmailProcessingWorkflow(
         gmail_reader=gmail_reader,

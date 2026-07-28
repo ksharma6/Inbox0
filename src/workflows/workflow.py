@@ -207,7 +207,11 @@ class EmailProcessingWorkflow:
                 llm_tool_schema=None,
                 system_message="You are an email assistant that speaks succinctly and professionally.",
             )
-            summary_text = self.agent.process_request(request_schema)
+            self.agent.set_context(workflow_run_id=state.workflow_run_id, stage="generate_email_summary")
+            try:
+                summary_text = self.agent.process_request(request_schema)
+            finally:
+                self.agent.clear_context()
 
             state.email_summary = EmailSummary(
                 total_unread=len(state.unread_emails),
@@ -276,7 +280,11 @@ class EmailProcessingWorkflow:
                     "You are an email assistant that analyzes emails to determine which ones require a response."
                 ),
             )
-            content = self.agent.process_request(request_schema)
+            self.agent.set_context(workflow_run_id=state.workflow_run_id, stage="process_emails_for_drafts")
+            try:
+                content = self.agent.process_request(request_schema)
+            finally:
+                self.agent.clear_context()
 
             # process content to verify it is valid JSON
             if "```json" in content:
@@ -331,7 +339,7 @@ class EmailProcessingWorkflow:
                     continue
 
                 # Generate draft response using OpenRouter
-                draft_content = self._generate_draft_response(email, email_info)
+                draft_content = self._generate_draft_response(email, email_info, state.workflow_run_id)
 
                 # Create draft using GmailWriter
                 try:
@@ -546,12 +554,14 @@ class EmailProcessingWorkflow:
             groups[sender].append(email)
         return groups
 
-    def _generate_draft_response(self, email, email_info: Dict) -> str:
+    def _generate_draft_response(self, email, email_info: Dict, workflow_run_id: Optional[str] = None) -> str:
         """Generate draft response content using OpenRouter
 
         Args:
             email: Email object
             email_info: dictionary of email information
+            workflow_run_id: Identifier of the workflow run, attached to the LLM
+                call record for this draft. Defaults to None.
 
         Returns:
             draft response content
@@ -587,7 +597,11 @@ class EmailProcessingWorkflow:
             llm_tool_schema=None,
             system_message="You are a professional email assistant that generates draft responses for emails.",
         )
-        content = self.agent.process_request(request_schema)
+        self.agent.set_context(workflow_run_id=workflow_run_id, stage="create_draft_responses")
+        try:
+            content = self.agent.process_request(request_schema)
+        finally:
+            self.agent.clear_context()
         return content or "No response generated"
 
     def _detect_thread_duplication(self, emails: list, step: str) -> None:
