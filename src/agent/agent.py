@@ -1,11 +1,13 @@
 import json
 import logging
 import time
-from typing import Callable, Dict
+from typing import Callable, Dict, Optional
 
 import tiktoken
 from openai import APIConnectionError, APITimeoutError, InternalServerError, OpenAI, RateLimitError
 from openai.types.chat import ChatCompletion
+from src.eval.event_log import EventLog
+from src.eval.event_schema import LLMCallCompleted
 from src.gmail.gmail_reader import GmailReader
 from src.gmail.gmail_writer import GmailWriter
 from src.models.agent_schemas import AgentSchema, ProcessRequestSchema
@@ -17,19 +19,24 @@ logger = logging.getLogger(__name__)
 
 
 class Agent:
-    def __init__(self, schema: AgentSchema):
+    def __init__(self, schema: AgentSchema, event_log: Optional[EventLog] = None):
         """Initializes OpenRouter agent using OpenRouter SDK and schema configuration defined by
         agent_schemas.py
 
         Args:
             schema (AgentSchema): Configuration schema containing API key, model, site_url, app_name, and
             available tools
+            event_log (Optional[EventLog]): Event log that receives an
+                LLMCallCompleted event per completion. When None, no events are
+                recorded. Defaults to None.
         """
         self.schema = schema
         self.available_tools = schema.available_tools
         self.function_map: Dict[str, Callable] = {}
         self.site_url = schema.site_url
         self.usage_tracker = UsageTracker()
+        self.event_log = event_log
+        self._context: Dict[str, Optional[str]] = {"workflow_run_id": None, "stage": None, "draft_id": None}
         self.client = OpenAI(
             api_key=schema.api_key,
             base_url=schema.base_url,
@@ -39,6 +46,27 @@ class Agent:
             },
         )
         self._setup_function_map()
+
+    def set_context(
+        self,
+        workflow_run_id: Optional[str] = None,
+        stage: Optional[str] = None,
+        draft_id: Optional[str] = None,
+    ) -> None:
+        """Set the identifiers attached to subsequent LLM call records.
+
+        Args:
+            workflow_run_id (Optional[str]): Workflow run the following calls
+                belong to. Defaults to None.
+            stage (Optional[str]): Name of the workflow stage making the calls.
+                Defaults to None.
+            draft_id (Optional[str]): Draft the calls relate to. Defaults to None.
+        """
+        self._context = {"workflow_run_id": workflow_run_id, "stage": stage, "draft_id": draft_id}
+
+    def clear_context(self) -> None:
+        """Reset the LLM call context so no identifiers are attached to records."""
+        self._context = {"workflow_run_id": None, "stage": None, "draft_id": None}
 
     def _setup_function_map(self):
         """Setup the function mapping based on available tools"""
@@ -86,8 +114,48 @@ class Agent:
         """Retry transient OpenAI/OpenRouter-compatible completion failures."""
         return self.client.chat.completions.create(**kwargs)
 
+    def _record_llm_call(self, usage, duration_ns: int) -> None:
+        """Emit an LLMCallCompleted event for the current call context.
+
+        No event is recorded when no event log is configured or when the current
+        context has no workflow_run_id (the event's required join key).
+
+        Args:
+            usage: Completion usage object exposing prompt_tokens and
+                completion_tokens.
+            duration_ns (int): Wall-clock duration of the call in nanoseconds.
+        """
+        workflow_run_id = self._context.get("workflow_run_id")
+        if self.event_log is None or workflow_run_id is None:
+            return
+        self.event_log.record(
+            LLMCallCompleted(
+                workflow_run_id=workflow_run_id,
+                model=self.schema.model,
+                prompt_tokens=usage.prompt_tokens,
+                completion_tokens=usage.completion_tokens,
+                stage=self._context.get("stage"),
+                draft_id=self._context.get("draft_id"),
+                duration_ns=duration_ns,
+            )
+        )
+
     def _timed_completion(self, label: str, **kwargs) -> ChatCompletion:
-        """Wraps chat.completions.create with pre-flight token estimation and duration logging"""
+        """Send a chat completion, logging token estimates, timing, and usage.
+
+        Estimates prompt tokens before the call, times the request, logs request
+        and response details, appends a usage entry, and emits an
+        LLMCallCompleted event when an event log and workflow context are set.
+
+        Args:
+            label (str): Short label identifying the call site (e.g. the
+                iteration number), used in log records.
+            **kwargs: Arguments forwarded to the chat completion request, such as
+                model, messages, and tools.
+
+        Returns:
+            ChatCompletion: The completion response.
+        """
         est_tokens = self._estimate_prompt_tokens(kwargs.get("messages", []))
         logger.info(
             "LLM request sent",
@@ -98,9 +166,10 @@ class Agent:
                 "estimated_prompt_tokens": est_tokens,
             },
         )
-        t0 = time.perf_counter()
+        t0 = time.perf_counter_ns()
         response = self._create_chat_completion(**kwargs)
-        elapsed_ms = (time.perf_counter() - t0) * 1000
+        duration_ns = time.perf_counter_ns() - t0
+        elapsed_ms = duration_ns / 1_000_000
         usage = response.usage
         tps = (usage.completion_tokens / (elapsed_ms / 1000)) if elapsed_ms > 0 else 0
         logger.info(
@@ -121,7 +190,11 @@ class Agent:
             site_url=self.site_url,
             prompt_tokens=usage.prompt_tokens,
             completion_tokens=usage.completion_tokens,
+            workflow_run_id=self._context.get("workflow_run_id"),
+            stage=self._context.get("stage"),
+            draft_id=self._context.get("draft_id"),
         )
+        self._record_llm_call(usage, duration_ns)
         return response
 
     def process_request(self, schema: ProcessRequestSchema, max_iterations: int = 5):
