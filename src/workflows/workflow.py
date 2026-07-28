@@ -2,6 +2,7 @@ import datetime
 import json
 import logging
 import os
+import time
 import uuid
 from collections import Counter
 from typing import Dict, List, Optional
@@ -9,6 +10,14 @@ from typing import Dict, List, Optional
 from langgraph.graph import END, StateGraph
 from src.agent.agent import Agent
 from src.eval.event_log import EventLog
+from src.eval.event_schema import (
+    DraftCandidateRecorded,
+    DraftSurfaced,
+    EmailIngested,
+    MetricEvent,
+    WorkflowCompleted,
+    WorkflowStarted,
+)
 from src.gmail import GmailReader, GmailWriter
 from src.models.agent_schemas import (
     GmailAgentState,
@@ -64,6 +73,16 @@ class EmailProcessingWorkflow:
         self._seen_message_ids: set = set()
 
         self.workflow = self._create_workflow()
+
+    def _record_event(self, event: MetricEvent) -> None:
+        """Record a metric event when an event log is configured.
+
+        Args:
+            event (MetricEvent): The event to record. Ignored when no event log
+                was provided to the workflow.
+        """
+        if self.event_log is not None:
+            self.event_log.record(event)
 
     def _create_workflow(self):
         """Create and return the compiled LangGraph workflow
@@ -136,6 +155,16 @@ class EmailProcessingWorkflow:
             recent_emails.extend(thread_emails)
 
         state.unread_emails = list({e.id: e for e in recent_emails}.values())[:5]
+
+        for email in state.unread_emails:
+            self._record_event(
+                EmailIngested(
+                    workflow_run_id=state.workflow_run_id,
+                    email_id=email.id,
+                    thread_id=email.thread_id,
+                )
+            )
+
         return state
 
     def _generate_email_summary(self, state: GmailAgentState) -> GmailAgentState:
@@ -372,6 +401,28 @@ class EmailProcessingWorkflow:
         if draft_id:
             state.current_draft_id = draft_id
 
+            original_email = draft_info["original_email"]
+            self._record_event(
+                DraftCandidateRecorded(
+                    workflow_run_id=state.workflow_run_id,
+                    draft_id=draft_id,
+                    email_id=draft_info["email_id"],
+                    thread_id=original_email.thread_id,
+                    source_context=original_email.body,
+                    generated_body=draft_info.get("draft_content", ""),
+                    generated_subject=f"Re: {original_email.subject}",
+                    recipient=original_email.from_email,
+                )
+            )
+            self._record_event(
+                DraftSurfaced(
+                    workflow_run_id=state.workflow_run_id,
+                    draft_id=draft_id,
+                    email_id=draft_info["email_id"],
+                    slack_message_ts=self.draft_handler.pending_drafts.get(draft_id, {}).get("slack_message_ts"),
+                )
+            )
+
         state.awaiting_approval = True
         state.awaiting_approval_since = datetime.datetime.now()
         save_state_to_store(state)
@@ -431,6 +482,15 @@ class EmailProcessingWorkflow:
 
             state.final_summary = final_summary
             state.workflow_complete = True
+
+            self._record_event(
+                WorkflowCompleted(
+                    workflow_run_id=state.workflow_run_id,
+                    monotonic_ns=time.perf_counter_ns(),
+                    emails_processed=len(state.unread_emails) if state.unread_emails else 0,
+                    drafts_created=len(state.draft_responses) if state.draft_responses else 0,
+                )
+            )
 
         except Exception as e:
             state.error_message = f"Error sending final summary: {str(e)}"
@@ -577,6 +637,8 @@ class EmailProcessingWorkflow:
         workflow_run_id = str(uuid.uuid4())
         self._seen_message_ids = set()
 
+        self._record_event(WorkflowStarted(workflow_run_id=workflow_run_id, monotonic_ns=time.perf_counter_ns()))
+
         initial_state = GmailAgentState(
             gmail_account_id=gmail_account_id,
             slack_user_id=slack_user_id,
@@ -670,6 +732,9 @@ class EmailProcessingWorkflow:
         """
         workflow_run_id = str(uuid.uuid4())
         self._seen_message_ids = set()
+
+        self._record_event(WorkflowStarted(workflow_run_id=workflow_run_id, monotonic_ns=time.perf_counter_ns()))
+
         initial_state = GmailAgentState(
             gmail_account_id=gmail_account_id,
             slack_user_id=slack_user_id,
