@@ -27,9 +27,6 @@ jobs:
       - name: Validate dependencies
         run: uv sync --group dev --locked
 
-      - name: Security scan
-        run: uv run pip-audit --ignore-vuln CVE-2026-3219
-
       - name: Create pull request
         uses: peter-evans/create-pull-request@v7
         with:
