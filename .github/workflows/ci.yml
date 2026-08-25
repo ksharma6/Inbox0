@@ -34,7 +34,7 @@ jobs:
         run: uv run pytest tests/ --cov=src --cov-report=xml --junit-xml=junit.xml
 
       - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && hashFiles('junit.xml') != '' }}
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
