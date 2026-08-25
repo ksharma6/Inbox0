@@ -7,7 +7,7 @@ name = "Inbox0"
 version = "0.1.0"
 description = "Inbox Zero"
 authors = [{ name = "Kishen Sharma", email = "ksharma06@pm.me" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 readme = "README.md"
 dependencies = [
     "flask>=3.1",
