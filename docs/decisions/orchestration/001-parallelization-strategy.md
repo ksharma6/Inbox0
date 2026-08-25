@@ -15,9 +15,7 @@ The `EmailProcessingWorkflow` has two sequential loops that each introduce avoid
 ```python
 # workflow.py lines 124–131
 for email in unread_emails:
-    thread_emails = self.gmail_reader.get_recent_emails_in_thread(
-        email.thread_id, count=2
-    )
+    thread_emails = self.gmail_reader.get_recent_emails_in_thread(email.thread_id, count=2)
     recent_emails.extend(thread_emails)
 ```
 
@@ -67,16 +65,13 @@ Apply `concurrent.futures.ThreadPoolExecutor` to both loops. The change is local
 ```python
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+
 def _read_unread_emails(self, state: GmailAgentState) -> GmailAgentState:
-    unread_emails = self.gmail_reader.read_emails(
-        count=5, unread_only=True, include_body=True, primary_only=True
-    )
+    unread_emails = self.gmail_reader.read_emails(count=5, unread_only=True, include_body=True, primary_only=True)
 
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {
-            executor.submit(
-                self.gmail_reader.get_recent_emails_in_thread, email.thread_id, 2
-            ): email
+            executor.submit(self.gmail_reader.get_recent_emails_in_thread, email.thread_id, 2): email
             for email in unread_emails
         }
         recent_emails = []

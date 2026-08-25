@@ -42,6 +42,7 @@ A `ClassificationCase` wrapper carries the label alongside the email:
 from dataclasses import dataclass
 from src.models.gmail import EmailMessage
 
+
 @dataclass
 class ClassificationCase:
     email: EmailMessage
