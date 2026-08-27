@@ -33,10 +33,6 @@ class Agent:
         self.client = OpenAI(
             api_key=schema.api_key,
             base_url=schema.base_url,
-            default_headers={
-                "HTTP-Referer": schema.site_url,
-                "X-Title": schema.app_name,
-            },
         )
         self._setup_function_map()
 
@@ -84,6 +80,12 @@ class Agent:
     )
     def _create_chat_completion(self, **kwargs) -> ChatCompletion:
         """Retry transient OpenAI/OpenRouter-compatible completion failures."""
+        # enforce zdr for OpenRouter
+        if "openrouter.ai" in (self.schema.base_url or ""):
+            kwargs.setdefault("extra_body", {})
+            provider = kwargs["extra_body"].setdefault("provider", {})
+            provider.update({"zdr": True, "data_collection": "deny"})
+
         return self.client.chat.completions.create(**kwargs)
 
     def _timed_completion(self, label: str, **kwargs) -> ChatCompletion:
