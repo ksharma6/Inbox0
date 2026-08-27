@@ -74,3 +74,37 @@ class TestAgent(unittest.TestCase):
 
         self.assertEqual(result, expected_response)
         self.assertEqual(create.call_count, 2)
+
+    def test_openrouter_chat_completion_privacy(self):
+        """OpenRouter requests require ZDR and deny provider data collection."""
+        self.agent.schema.base_url = "https://openrouter.ai/api/v1"
+        self.agent.client = MagicMock()
+        expected_response = MagicMock()
+        expected_response = self.agent.client.chat.completions.create.return_value
+
+        messages = [{"role": "user", "content": "hello"}]
+        result = self.agent._create_chat_completion(model="test-model", messages=messages)
+
+        self.assertEqual(result, expected_response)
+
+        create_completion = self.agent.client.chat.completions.create
+
+        create_completion.assert_called_once_with(
+            model="test-model",
+            messages=messages,
+            extra_body={
+                "provider": {
+                    "zdr": True,
+                    "data_collection": "deny",
+                }
+            },
+        )
+
+    def test_non_openrouter_chat_completion_omits_openrouter_fields(self):
+        """Non-OpenRouter requests do not receive OpenRouter-specific fields"""
+        self.agent.schema.base_url = "http://localhost:11434/v1"
+        self.agent.client = MagicMock()
+        messages = [{"role": "user", "content": "hello"}]
+        self.agent._create_chat_completion(model="test-model", messages=messages)
+        create_completion = self.agent.client.chat.completions.create
+        create_completion.assert_called_once_with(model="test-model", messages=messages)
