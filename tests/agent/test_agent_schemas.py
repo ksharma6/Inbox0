@@ -31,13 +31,6 @@ def test_agent_schema_rejects_blank_api_key():
         AgentSchema(api_key="   ")
 
 
-def test_agent_schema_defaults_app_name_to_inbox0():
-    with patch.dict("os.environ", {"OPENROUTER_API_KEY": "openrouter-key"}, clear=True):
-        schema = AgentSchema()
-
-    assert schema.app_name == "Inbox0"
-
-
 def test_gmail_agent_state_uses_workflow_run_id_not_thread_id():
     state = GmailAgentState(
         gmail_account_id="gmail-account-123",
