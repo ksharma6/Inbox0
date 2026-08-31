@@ -11,19 +11,22 @@ class ShadowGmailWriter(GmailWriter):
     The inherited Gmail client remains available for creating, decoding, and
     saving drafts. Send operations return synthetic results without calling
     Gmail's message-send API.
+
     Args:
         token_path (str): Directory containing the user's Gmail OAuth tokens.
     """
 
-    def send_draft(self, draft):
+    def send_draft(self, draft: dict) -> dict:
         """Intercept a draft send and return a synthetic message result in shadow mode.
         Logs the intercepted operation without sending the draft through Gmail.
+
         Args:
             draft (dict): Encoded email draft that would have been sent.
+
         Returns:
             dict: Synthetic result containing a shadow message ID and marker.
         """
-        shadow_message_id = f"shadow_msg_{str(uuid.uuid4())}"
+        shadow_message_id = f"shadow_msg_{uuid.uuid4()}"
 
         shadow_message = {
             "id": shadow_message_id,
@@ -33,17 +36,19 @@ class ShadowGmailWriter(GmailWriter):
         logger.info(f"Intercepted Gmail draft send in shadow mode: message_id {shadow_message_id}")
         return shadow_message
 
-    def send_reply(self, original_message, reply_message):
+    def send_reply(self, original_message: dict, reply_message: str) -> dict:
         """Intercept a reply send and return a synthetic message result in shadow mode.
         Logs the intercepted operation without sending the reply through Gmail.
+
         Args:
             original_message (dict): Original Gmail message being replied to.
             reply_message (str): Body of the reply that would have been sent.
+
         Returns:
             dict: Synthetic result containing a shadow message ID and marker.
         """
 
-        shadow_message_id = f"shadow_msg_{str(uuid.uuid4())}"
+        shadow_message_id = f"shadow_msg_{uuid.uuid4()}"
 
         shadow_message = {
             "id": shadow_message_id,
