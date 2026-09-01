@@ -29,8 +29,6 @@ def get_workflow(slack_app: SlackApp | None = None) -> EmailProcessingWorkflow:
         OPENROUTER_API_KEY or OPENAI_API_KEY: API key used by `AgentSchema`.
         OPENROUTER_BASE_URL: Optional OpenRouter-compatible API base URL.
         OPENROUTER_MODEL or LLM_MODEL: Optional model override.
-        SITE_URL: Optional site URL reported to OpenRouter.
-        APP_NAME: Optional app name reported to OpenRouter.
 
     Returns:
         EmailProcessingWorkflow: A configured workflow instance with Gmail,
