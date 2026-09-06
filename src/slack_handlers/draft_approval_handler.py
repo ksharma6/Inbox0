@@ -1,5 +1,4 @@
 import logging
-import os
 import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Optional
@@ -9,13 +8,6 @@ from slack_bolt.context.ack import Ack
 from slack_bolt.context.say import Say
 from slack_sdk.errors import SlackApiError
 from src.gmail.gmail_writer import GmailWriter
-
-
-def get_draft_handler(slack_app):
-    """Get or create the draft approval handler"""
-    gmail_writer = GmailWriter(os.getenv("TOKENS_PATH"))
-    draft_handler = DraftApprovalHandler(gmail_writer=gmail_writer, slack_app=slack_app)
-    return draft_handler
 
 
 class DraftApprovalHandler:

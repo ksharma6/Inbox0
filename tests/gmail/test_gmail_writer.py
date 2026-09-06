@@ -39,14 +39,24 @@ def test_create_draft_includes_thread_id_even_when_subject_changes(writer):
 
 
 def test_save_draft_passes_thread_id_to_gmail(writer):
-    """save_draft should pass threadId through to Gmail drafts.create."""
+    """Verify that saved drafts retain their Gmail thread association."""
     draft = {"raw": "encoded-message", "threadId": THREAD_ID}
-    writer.service.users.return_value.drafts.return_value.create.return_value.execute.return_value = {"id": "draft-1"}
+    expected_body = {
+        "message": {
+            "raw": "encoded-message",
+            "threadId": THREAD_ID,
+        }
+    }
+
+    create_draft_mock = writer.service.users.return_value.drafts.return_value.create
+    create_draft_mock.return_value.execute.return_value = {"id": "draft-1"}
 
     writer.save_draft(draft)
 
-    create_kwargs = writer.service.users.return_value.drafts.return_value.create.call_args.kwargs
-    assert create_kwargs["body"] == {"message": {"raw": "encoded-message", "threadId": THREAD_ID}}
+    create_draft_mock.assert_called_once_with(
+        userId="me",
+        body=expected_body,
+    )
 
 
 def test_standalone_drafts_do_not_include_thread_id(writer):
