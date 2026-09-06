@@ -10,7 +10,10 @@ class AppMode(Enum):
     def get_app_mode(cls) -> "AppMode":
 
         app_mode = os.getenv("SHADOW_MODE")
-        app_mode = app_mode.strip().lower()
+        if app_mode is not None:
+            app_mode = app_mode.strip().lower()
+        else:
+            app_mode = "false"
 
         if app_mode == "true":
             return cls.SHADOW
