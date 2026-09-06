@@ -146,10 +146,17 @@ class GmailWriter:
         Send a reply to an original email message given the thread id.
 
         Args:
-            original_message (dict): The original email message dictionary in the format of
-                {"payload": {"headers": [{"name": "From", "value": "sender@example.com"},
-                {"name": "Subject", "value": "Test Email"}, {"name": "Message-ID", "value": "1234567890"},
-                {"name": "To", "value": "recipient@example.com"}]}}.
+            original_message = {
+                "threadId": THREAD_ID,
+                "payload": {
+                    "headers": [
+                        {"name": "From", "value": "them@example.com"},
+                        {"name": "To", "value": "me@example.com"},
+                        {"name": "Subject", "value": "Shadow Mode Test"},
+                        {"name": "Message-ID", "value": "<message-123@example.com>"},
+                    ]
+                },
+            }
             reply_message (str): The reply message body.
 
         Returns:
