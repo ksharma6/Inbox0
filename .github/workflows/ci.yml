@@ -40,14 +40,16 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: junit.xml
           report_type: test_results
-          fail_ci_if_error: true
+          fail_ci_if_error: false
+          use_pypi: true
 
       - name: Upload coverage
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
-          fail_ci_if_error: true
+          fail_ci_if_error: false
+          use_pypi: true
 
       - name: Security scan
         run: uv run --locked pip-audit

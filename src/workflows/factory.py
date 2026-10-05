@@ -2,6 +2,8 @@ import os
 
 from slack_bolt import App as SlackApp
 from src.agent.agent import Agent
+from src.eval.app_mode import AppMode
+from src.eval.shadow_mode.shadow_gmail_writer import ShadowGmailWriter
 from src.gmail import GmailReader, GmailWriter
 from src.models.agent_schemas import AgentSchema
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
@@ -46,8 +48,12 @@ def get_workflow(slack_app: SlackApp | None = None) -> EmailProcessingWorkflow:
         ```
     """
     gmail_token = os.getenv("TOKENS_PATH")
-    gmail_writer = GmailWriter(gmail_token)
     gmail_reader = GmailReader(gmail_token)
+
+    if AppMode.get_app_mode() is AppMode.SHADOW:
+        gmail_writer = ShadowGmailWriter(gmail_token)
+    else:
+        gmail_writer = GmailWriter(gmail_token)
 
     if slack_app is None:
         slack_app = SlackApp(
