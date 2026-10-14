@@ -8,7 +8,7 @@ beautifulsoup4==4.15.0
 google-api-python-client==2.201.0
 google-auth-oauthlib==1.4.1
 langchain==1.4.3
-openai==3.19.2
+openai==3.29.0
 openrouter==0.10.0
 pip-chill==1.0.5
 pyasn1_modules==0.4.2
