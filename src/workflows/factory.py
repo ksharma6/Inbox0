@@ -51,9 +51,9 @@ def get_workflow(slack_app: SlackApp | None = None) -> EmailProcessingWorkflow:
     gmail_reader = GmailReader(gmail_token)
 
     if AppMode.get_app_mode() is AppMode.SHADOW:
-        gmail_writer = ShadowGmailWriter(gmail_token)
+        gmail_writer = ShadowGmailWriter(token_path=gmail_token, app_mode=AppMode.SHADOW)
     else:
-        gmail_writer = GmailWriter(gmail_token)
+        gmail_writer = GmailWriter(token_path=gmail_token, app_mode=AppMode.LIVE)
 
     if slack_app is None:
         slack_app = SlackApp(
