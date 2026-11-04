@@ -9,7 +9,7 @@ THREAD_ID = "thread_active_123"
 def shadow_writer(mocker):
     mocker.patch("src.gmail.gmail_writer.auth_user", return_value=mocker.Mock())
     mocker.patch("src.gmail.gmail_writer.build", return_value=mocker.Mock())
-    return ShadowGmailWriter(token_path="/fake/tokens/", app_mode=AppMode.LIVE)
+    return ShadowGmailWriter(token_path="/fake/tokens/", app_mode=AppMode.SHADOW)
 
 
 def test_send_draft_returns_synthetic_result(shadow_writer):
