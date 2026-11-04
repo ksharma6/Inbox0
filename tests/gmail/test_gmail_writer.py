@@ -3,6 +3,7 @@ from email import message_from_bytes
 from email.policy import default
 
 import pytest
+from src.eval.app_mode import AppMode
 from src.gmail.gmail_writer import GmailWriter
 
 THREAD_ID = "thread_active_123"
@@ -13,7 +14,7 @@ def writer(mocker):
     """Build a GmailWriter with auth and Gmail API client mocked out."""
     mocker.patch("src.gmail.gmail_writer.auth_user", return_value=mocker.Mock())
     mocker.patch("src.gmail.gmail_writer.build", return_value=mocker.Mock())
-    return GmailWriter(token_path="/fake/tokens/")
+    return GmailWriter(token_path="/fake/tokens/", app_mode=AppMode.LIVE)
 
 
 def _decode_raw_message(raw_message):
