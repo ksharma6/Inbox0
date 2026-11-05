@@ -13,7 +13,26 @@ class ShadowGmailWriter(GmailWriter):
     Gmail's message-send API.
 
     Args:
-        token_path (str): Directory containing the user's Gmail OAuth tokens.
+        token_path (str): Directory containing the user's Gmail OAuth tokens
+            (e.g., `token.json`). Passed to `auth_user` to obtain credentials.
+        app_mode (AppMode): Execution mode this writer was created for. Read
+            by components that select mode-specific behavior, such as the
+            Slack approval message labels.
+    Attributes:
+        token_path (str): Directory used to locate authentication tokens.
+        app_mode (AppMode): Execution mode this writer was created for.
+        creds: Gmail API credentials returned by `auth_user`.
+        service: Gmail API service client used for all Gmail requests.
+    Example:
+        writer = ShadowGmailWriter(token_path="/path/to/tokens", app_mode=AppMode.SHADOW)
+        draft = writer.create_draft(
+            sender="user@example.com",
+            recipient="recipient@example.com",
+            subject="Test Email",
+            message="This is a test email",
+            attachment_path="/path/to/attachment.pdf",
+        )
+        writer.send_draft(draft)
     """
 
     def send_draft(self, draft: dict) -> dict:

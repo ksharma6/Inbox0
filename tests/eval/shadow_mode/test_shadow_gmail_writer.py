@@ -1,4 +1,5 @@
 import pytest
+from src.eval.app_mode import AppMode
 from src.eval.shadow_mode.shadow_gmail_writer import ShadowGmailWriter
 
 THREAD_ID = "thread_active_123"
@@ -8,7 +9,7 @@ THREAD_ID = "thread_active_123"
 def shadow_writer(mocker):
     mocker.patch("src.gmail.gmail_writer.auth_user", return_value=mocker.Mock())
     mocker.patch("src.gmail.gmail_writer.build", return_value=mocker.Mock())
-    return ShadowGmailWriter(token_path="/fake/tokens/")
+    return ShadowGmailWriter(token_path="/fake/tokens/", app_mode=AppMode.SHADOW)
 
 
 def test_send_draft_returns_synthetic_result(shadow_writer):

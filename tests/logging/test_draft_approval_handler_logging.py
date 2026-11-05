@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 
+from src.eval.app_mode import AppMode
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
 
 
@@ -8,7 +9,7 @@ def test_draft_approval_handler_logging(caplog, mocker):
     """Test logging in draft approval handler"""
 
     slack_app = mocker.Mock()
-    gmail_writer = mocker.Mock()
+    gmail_writer = mocker.Mock(app_mode=AppMode.LIVE)
     say_mock = mocker.Mock()
 
     draft_handler = DraftApprovalHandler(gmail_writer=gmail_writer, slack_app=slack_app)
@@ -33,7 +34,7 @@ def test_draft_approval_handler_logging(caplog, mocker):
 
 def test_approval_message_button_values_include_workflow_run_id(mocker):
     slack_app = mocker.Mock()
-    gmail_writer = mocker.Mock()
+    gmail_writer = mocker.Mock(app_mode=AppMode.LIVE)
     draft_handler = DraftApprovalHandler(gmail_writer=gmail_writer, slack_app=slack_app)
     draft_handler.draft_timeouts["draft-abc-123"] = datetime.now() + timedelta(hours=1)
 

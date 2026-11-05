@@ -16,35 +16,40 @@ logger = logging.getLogger(__name__)
 
 
 class GmailWriter:
-    def __init__(self, token_path):
+    def __init__(self, token_path, app_mode):
         """
-        Writer for Gmail that sends messages via the Gmail API.
+        Create a Gmail writer that composes, sends, replies to, and saves email drafts through the Gmail API.
 
-        This client wraps the Gmail API to create drafts, send messages, and reply to emails given a thread id.
+        Authenticates with the user's stored OAuth tokens and builds a Gmail API
+        service client during construction, so creating an instance reads token
+        files and may contact Google's authentication servers.
 
         Args:
-            token_path (str): Directory containing the user's Gmail OAuth tokens (e.g.,
-                `token.json`). Used by `auth_user` to obtain credentials.
+            token_path (str): Directory containing the user's Gmail OAuth tokens
+                (e.g., `token.json`). Passed to `auth_user` to obtain credentials.
+            app_mode (AppMode): Execution mode this writer was created for.
 
         Attributes:
-            path (str): Directory used to locate authentication tokens.
-            creds: Gmail API credentials object.
-            service: Gmail API service client object used to interact with the Gmail API.
+            token_path (str): Directory used to locate authentication tokens.
+            app_mode (AppMode): Execution mode this writer was created for.
+            creds: Gmail API credentials returned by `auth_user`.
+            service: Gmail API service client used for all Gmail requests.
 
         Example:
-            writer = GmailWriter(token_path="/path/to/tokens")
+            writer = GmailWriter(token_path="/path/to/tokens", app_mode=AppMode.LIVE)
             draft = writer.create_draft(
                 sender="user@example.com",
                 recipient="recipient@example.com",
                 subject="Test Email",
                 message="This is a test email",
-                attachment_path="/path/to/attachment.pdf"
+                attachment_path="/path/to/attachment.pdf",
             )
             writer.send_draft(draft)
         """
         self.token_path = token_path
         self.creds = auth_user(self.token_path)
         self.service = build("gmail", "v1", credentials=self.creds)
+        self.app_mode = app_mode
 
     def create_draft(
         self,

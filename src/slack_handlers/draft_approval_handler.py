@@ -7,7 +7,13 @@ from slack_bolt import App
 from slack_bolt.context.ack import Ack
 from slack_bolt.context.say import Say
 from slack_sdk.errors import SlackApiError
+from src.eval.app_mode import AppMode
 from src.gmail.gmail_writer import GmailWriter
+
+LABELS = {
+    AppMode.LIVE: {"approve": "✅ Approve & Send", "reject": "❌ Reject", "save": "💾 Save Draft"},
+    AppMode.SHADOW: {"approve": "👍 Would Send", "reject": "👎 Would Reject", "save": "✏️ Would Edit"},
+}
 
 
 class DraftApprovalHandler:
@@ -104,6 +110,8 @@ class DraftApprovalHandler:
         Returns:
             Dict: Message text and blocks for Slack approval message
         """
+        labels = LABELS[self.gmail_writer.app_mode]
+
         # create email draft
         text = "*Email Draft for Approval*\n\n"
         text += f"*From:* {decoded_draft.get('sender', 'N/A')}\n"
@@ -132,7 +140,7 @@ class DraftApprovalHandler:
                         "type": "button",
                         "text": {
                             "type": "plain_text",
-                            "text": "✅ Approve & Send",
+                            "text": labels["approve"],
                             "emoji": True,
                         },
                         "style": "primary",
@@ -143,7 +151,7 @@ class DraftApprovalHandler:
                         "type": "button",
                         "text": {
                             "type": "plain_text",
-                            "text": "❌ Reject",
+                            "text": labels["reject"],
                             "emoji": True,
                         },
                         "style": "danger",
@@ -154,7 +162,7 @@ class DraftApprovalHandler:
                         "type": "button",
                         "text": {
                             "type": "plain_text",
-                            "text": "💾 Save Draft",
+                            "text": labels["save"],
                             "emoji": True,
                         },
                         "value": action_value("save"),
