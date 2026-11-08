@@ -17,13 +17,17 @@ logger = logging.getLogger(__name__)
 
 
 class Agent:
+    """Run tool-calling chat requests through an OpenAI-compatible API client."""
+
     def __init__(self, schema: AgentSchema):
-        """Initializes OpenRouter agent using OpenRouter SDK and schema configuration defined by
-        agent_schemas.py
+        """Initialize an agent from the supplied API and tool configuration.
+
+        The agent creates an API client, initializes usage tracking, and
+        registers callable functions from the configured tool instances.
 
         Args:
-            schema (AgentSchema): Configuration schema containing API key, model, site_url, app_name, and
-            available tools
+            schema (AgentSchema): API, model, site, and tool configuration used
+                to process requests.
         """
         self.schema = schema
         self.available_tools = schema.available_tools
@@ -37,7 +41,13 @@ class Agent:
         self._setup_function_map()
 
     def _setup_function_map(self):
-        """Setup the function mapping based on available tools"""
+        """Register supported tool methods in the agent's function map.
+
+        Gmail writer, Gmail reader, and draft approval handler methods are
+        registered by their model-facing function names. Unknown tool types
+        are logged and skipped. If no tools are configured, the map remains
+        unchanged.
+        """
         if not self.available_tools:
             return
         for tool_name, instance in self.available_tools.items():
@@ -54,9 +64,18 @@ class Agent:
                 logger.error(f"Unknown tool type: {type(instance)} for tool: {tool_name}")
 
     def _estimate_prompt_tokens(self, messages: list[dict]) -> int:
-        """
-        Estimates the number of tokens across all messages before sending to LLM.
-        Uses cl100k_base as fallback for non-OpenAI models routed via OpenRouter.
+        """Estimate and return the token count for message string contents.
+
+        The configured model's tokenizer is used when available; otherwise,
+        the ``cl100k_base`` tokenizer is used.
+
+        Args:
+            messages (list[dict]): Chat messages to measure. Each item may be a
+                dict or an object with a content attribute.
+
+        Returns:
+            int: Estimated token count across all string contents. Messages with
+                missing or non-string content contribute zero.
         """
         try:
             encoding = tiktoken.encoding_for_model(self.schema.model)
@@ -79,7 +98,25 @@ class Agent:
         reraise=True,
     )
     def _create_chat_completion(self, **kwargs) -> ChatCompletion:
-        """Retry transient OpenAI/OpenRouter-compatible completion failures."""
+        """Create and return a chat completion, retrying transient API failures.
+
+        Requests sent to OpenRouter enforce zero data retention and deny
+        provider data collection.
+
+        Args:
+            **kwargs (dict): Keyword arguments forwarded to the chat
+                completions API.
+
+        Returns:
+            ChatCompletion: The completion returned by the API.
+
+        Raises:
+            APIConnectionError: If all retries fail because the API cannot be
+                reached.
+            APITimeoutError: If all retries time out.
+            RateLimitError: If all retries are rate limited.
+            InternalServerError: If all retries fail with a server error.
+        """
         # enforce zdr for OpenRouter
         if "openrouter.ai" in (self.schema.base_url or ""):
             kwargs.setdefault("extra_body", {})
@@ -89,7 +126,19 @@ class Agent:
         return self.client.chat.completions.create(**kwargs)
 
     def _timed_completion(self, label: str, **kwargs) -> ChatCompletion:
-        """Wraps chat.completions.create with pre-flight token estimation and duration logging"""
+        """Create and return a chat completion while recording timing and usage.
+
+        The method estimates prompt tokens before the network request, logs
+        request and response metrics, and records billed token usage.
+
+        Args:
+            label (str): Step name included in request and response log records.
+            **kwargs (dict): Keyword arguments forwarded to the chat
+                completions API.
+
+        Returns:
+            ChatCompletion: The completion returned by the API.
+        """
         est_tokens = self._estimate_prompt_tokens(kwargs.get("messages", []))
         logger.info(
             "LLM request sent",
@@ -127,14 +176,20 @@ class Agent:
         return response
 
     def process_request(self, schema: ProcessRequestSchema, max_iterations: int = 5):
-        """Processes user's request by interacting with OpenRouter model.
+        """Process a request and return the model's final text response.
+
+        The method sends the conversation to the configured model, executes
+        requested tools, appends their results, and repeats until the model
+        responds without tool calls or the iteration limit is reached.
 
         Args:
-            schema (ProcessRequestSchema): Request schema containing user prompt, tool schema, and system message
-            max_iterations (int): Maximum number of tool call rounds (default: 5)
+            schema (ProcessRequestSchema): User prompt, optional system message,
+                and tool schemas for the request.
+            max_iterations (int): Maximum number of tool-call rounds. Defaults
+                to 5.
 
         Returns:
-            str: The final response from the agent
+            str: The model's final response text.
         """
         self.llm_tool_schema = schema.llm_tool_schema
         self.user_prompt = schema.user_prompt
