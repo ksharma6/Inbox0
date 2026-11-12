@@ -108,3 +108,30 @@ class TestAgent(unittest.TestCase):
         self.agent._create_chat_completion(model="test-model", messages=messages)
         create_completion = self.agent.client.chat.completions.create
         create_completion.assert_called_once_with(model="test-model", messages=messages)
+
+    @patch("src.agent.agent.tiktoken")
+    def test_estimate_prompt_tokens_uses_model_encoding(self, mock_tiktoken):
+        encoder = mock_tiktoken.encoding_for_model.return_value
+        encoder.encode.side_effect = lambda x: list(x)
+
+        messages = [{"role": "system", "content": "hello world"}, {"role": "system", "content": None}]
+
+        total = self.agent._estimate_prompt_tokens(messages=messages)
+
+        self.assertEqual(total, 11)
+        mock_tiktoken.encoding_for_model.assert_called_once_with(self.agent.schema.model)
+        mock_tiktoken.get_encoding.assert_not_called()
+
+    @patch("src.agent.agent.tiktoken")
+    def test_estimate_prompt_tokens_uses_cl100k_base_encoding(self, mock_tiktoken):
+        mock_tiktoken.encoding_for_model.side_effect = KeyError()
+        encoder = mock_tiktoken.get_encoding.return_value
+        encoder.encode.side_effect = lambda x: list(x)
+
+        messages = [{"role": "system", "content": "hello world"}, {"role": "system", "content": None}]
+
+        total = self.agent._estimate_prompt_tokens(messages=messages)
+        self.assertEqual(11, total)
+
+        mock_tiktoken.get_encoding.assert_called_once_with("cl100k_base")
+        mock_tiktoken.encoding_for_model.assert_called()
