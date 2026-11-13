@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -6,7 +7,7 @@ from openai import APIConnectionError
 from src.agent.agent import Agent
 from src.gmail.gmail_reader import GmailReader
 from src.gmail.gmail_writer import GmailWriter
-from src.models.agent_schemas import AgentSchema
+from src.models.agent_schemas import AgentSchema, ProcessRequestSchema
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
 from tenacity import wait_none
 
@@ -135,3 +136,19 @@ class TestAgent(unittest.TestCase):
 
         mock_tiktoken.get_encoding.assert_called_once_with("cl100k_base")
         mock_tiktoken.encoding_for_model.assert_called()
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_process_request_returns_content_when_no_tool_calls(self, mock_timed_completion):
+        mock_response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(tool_calls=None, content="final answer"))]
+        )
+
+        mock_timed_completion.return_value = mock_response
+
+        no_tools_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        x = self.agent.process_request(no_tools_schema)
+
+        assert x == "final answer"
