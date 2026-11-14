@@ -112,6 +112,7 @@ class TestAgent(unittest.TestCase):
 
     @patch("src.agent.agent.tiktoken")
     def test_estimate_prompt_tokens_uses_model_encoding(self, mock_tiktoken):
+        """Use the model-specific tokenizer when the model has a known encoding."""
         encoder = mock_tiktoken.encoding_for_model.return_value
         encoder.encode.side_effect = lambda x: list(x)
 
@@ -125,6 +126,7 @@ class TestAgent(unittest.TestCase):
 
     @patch("src.agent.agent.tiktoken")
     def test_estimate_prompt_tokens_uses_cl100k_base_encoding(self, mock_tiktoken):
+        """Fall back to the cl100k_base tokenizer for an unknown model."""
         mock_tiktoken.encoding_for_model.side_effect = KeyError()
         encoder = mock_tiktoken.get_encoding.return_value
         encoder.encode.side_effect = lambda x: list(x)
@@ -139,6 +141,7 @@ class TestAgent(unittest.TestCase):
 
     @patch("src.agent.agent.Agent._timed_completion")
     def test_process_request_returns_content_when_no_tool_calls(self, mock_timed_completion):
+        """Return the assistant content when the response has no tool calls."""
         mock_response = SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(tool_calls=None, content="final answer"))]
         )
@@ -152,3 +155,29 @@ class TestAgent(unittest.TestCase):
         x = self.agent.process_request(no_tools_schema)
 
         assert x == "final answer"
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_max_iterations_terminates_tool_calls(self, mock_timed_completion):
+        """Return the final response when processing reaches its iteration limit."""
+        mock_final_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="final answer",
+                        tool_calls=[
+                            SimpleNamespace(id="01", function=SimpleNamespace(name="read_emails", arguments="{}"))
+                        ],
+                    )
+                )
+            ]
+        )
+        mock_timed_completion.return_value = mock_final_response
+
+        tools_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        final_response = self.agent.process_request(tools_schema, max_iterations=1)
+
+        assert final_response == "final answer"
+        assert mock_timed_completion.call_count == 2
