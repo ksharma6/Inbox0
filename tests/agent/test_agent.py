@@ -181,3 +181,35 @@ class TestAgent(unittest.TestCase):
 
         assert final_response == "final answer"
         assert mock_timed_completion.call_count == 2
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_unknown_tool_names_create_informative_tool_response(self, mocked_timed_completion):
+        mocked_final_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="01",
+                                function=SimpleNamespace(name="gmail_wr1ter", arguments="{}"),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+        mocked_timed_completion.return_value = mocked_final_response
+
+        tools_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        self.agent.process_request(tools_schema, max_iterations=1)
+
+        last_call = mocked_timed_completion.call_args.kwargs
+        messages = last_call["messages"]
+        tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
+
+        assert "is not available" in tool_message["content"]
+        assert tool_message["name"] == "gmail_wr1ter"
