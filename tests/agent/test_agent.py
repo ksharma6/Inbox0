@@ -213,3 +213,32 @@ class TestAgent(unittest.TestCase):
 
         assert "is not available" in tool_message["content"]
         assert tool_message["name"] == "gmail_wr1ter"
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_read_email_invoked_with_invalid_json(self, mocked_timed_completion):
+        mocked_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="01",
+                                function=SimpleNamespace(
+                                    name="read_emails", arguments="{silly_name: very wrong json lol}"
+                                ),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+
+        mocked_timed_completion.return_value = mocked_response
+        tools_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        self.agent.process_request(tools_schema, max_iterations=1)
+
+        self.mock_gmail_reader.read_emails.assert_called_once_with()
