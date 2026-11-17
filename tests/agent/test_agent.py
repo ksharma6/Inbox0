@@ -242,3 +242,36 @@ class TestAgent(unittest.TestCase):
         self.agent.process_request(tools_schema, max_iterations=1)
 
         self.mock_gmail_reader.read_emails.assert_called_once_with()
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_invalid_json_args_produce_expected_tool_error_response(self, mock_timed_completion):
+        mocked_final_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="01",
+                                function=SimpleNamespace(
+                                    name="send_draft_for_approval", arguments="{incorrect:params}"
+                                ),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+        tools_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+        mock_timed_completion.return_value = mocked_final_response
+        self.agent.process_request(tools_schema, max_iterations=1)
+
+        last_call = mock_timed_completion.call_args
+        messages = last_call.kwargs["messages"]
+        tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
+
+        assert "Error: Invalid arguments for " in tool_message["content"]
+        assert tool_message["name"] == "send_draft_for_approval"
+        self.mock_draft_approval_handler.send_draft_for_approval.assert_not_called()
