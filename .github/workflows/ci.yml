@@ -52,4 +52,4 @@ jobs:
           use_pypi: true
 
       - name: Security scan
-        run: uv run --locked pip-audit
+        run: uv run --locked pip-audit --timeout 60 || (sleep 10 && uv run --locked pip-audit --timeout 60)
