@@ -253,9 +253,7 @@ class TestAgent(unittest.TestCase):
                         tool_calls=[
                             SimpleNamespace(
                                 id="01",
-                                function=SimpleNamespace(
-                                    name="send_draft_for_approval", arguments="{incorrect:params}"
-                                ),
+                                function=SimpleNamespace(name="send_draft_for_approval", arguments="{invalid_json}"),
                             )
                         ],
                     )
@@ -274,4 +272,37 @@ class TestAgent(unittest.TestCase):
 
         assert "Error: Invalid arguments for " in tool_message["content"]
         assert tool_message["name"] == "send_draft_for_approval"
+        self.mock_draft_approval_handler.send_draft_for_approval.assert_not_called()
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_send_draft_for_approval_rejects_empty_draft(self, mock_timed_completion):
+        mocked_final_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="01",
+                                function=SimpleNamespace(name="send_draft_for_approval", arguments='{"draft": ""}'),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+
+        mock_timed_completion.return_value = mocked_final_response
+
+        tool_schema = ProcessRequestSchema(
+            user_prompt="test prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        self.agent.process_request(tool_schema, max_iterations=1)
+
+        last_call = mock_timed_completion.call_args
+        messages = last_call.kwargs["messages"]
+        tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
+
+        assert "Error: send_draft_for_approval requires a draft object." in tool_message["content"]
         self.mock_draft_approval_handler.send_draft_for_approval.assert_not_called()
