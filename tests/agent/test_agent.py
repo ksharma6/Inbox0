@@ -340,3 +340,44 @@ class TestAgent(unittest.TestCase):
         tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
         assert "Error: Could not call create_draft due to argument mismatch." in tool_message["content"]
         self.mock_gmail_writer.create_draft.assert_called_once()
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_valid_tool_call_dispatches_decoded_args(self, mock_timed_completion):
+        mock_final_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="01",
+                                function=SimpleNamespace(
+                                    name="create_draft",
+                                    arguments=(
+                                        '{"sender": "test", "recipient": "test", "subject": "test", "message": "test"}'
+                                    ),
+                                ),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+        mock_timed_completion.return_value = mock_final_response
+        self.mock_gmail_writer.create_draft.return_value = "<draft>"
+
+        tools_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        self.agent.process_request(tools_schema, max_iterations=1)
+
+        last_call = mock_timed_completion.call_args
+        messages = last_call.kwargs["messages"]
+        tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
+
+        self.mock_gmail_writer.create_draft.assert_called_once_with(
+            sender="test", recipient="test", subject="test", message="test"
+        )
+
+        assert tool_message["content"] == "<draft>"
