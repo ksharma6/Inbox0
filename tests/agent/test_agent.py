@@ -183,8 +183,8 @@ class TestAgent(unittest.TestCase):
         assert mock_timed_completion.call_count == 2
 
     @patch("src.agent.agent.Agent._timed_completion")
-    def test_unknown_tool_names_create_informative_tool_response(self, mocked_timed_completion):
-        mocked_final_response = SimpleNamespace(
+    def test_unknown_tool_names_create_informative_tool_response(self, mock_timed_completion):
+        mock_final_response = SimpleNamespace(
             choices=[
                 SimpleNamespace(
                     message=SimpleNamespace(
@@ -199,7 +199,7 @@ class TestAgent(unittest.TestCase):
                 )
             ]
         )
-        mocked_timed_completion.return_value = mocked_final_response
+        mock_timed_completion.return_value = mock_final_response
 
         tools_schema = ProcessRequestSchema(
             user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
@@ -207,7 +207,7 @@ class TestAgent(unittest.TestCase):
 
         self.agent.process_request(tools_schema, max_iterations=1)
 
-        last_call = mocked_timed_completion.call_args.kwargs
+        last_call = mock_timed_completion.call_args.kwargs
         messages = last_call["messages"]
         tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
 
@@ -215,8 +215,8 @@ class TestAgent(unittest.TestCase):
         assert tool_message["name"] == "gmail_wr1ter"
 
     @patch("src.agent.agent.Agent._timed_completion")
-    def test_read_email_invoked_with_invalid_json(self, mocked_timed_completion):
-        mocked_response = SimpleNamespace(
+    def test_read_email_invoked_with_invalid_json(self, mock_timed_completion):
+        mock_response = SimpleNamespace(
             choices=[
                 SimpleNamespace(
                     message=SimpleNamespace(
@@ -234,7 +234,7 @@ class TestAgent(unittest.TestCase):
             ]
         )
 
-        mocked_timed_completion.return_value = mocked_response
+        mock_timed_completion.return_value = mock_response
         tools_schema = ProcessRequestSchema(
             user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
         )
@@ -245,7 +245,7 @@ class TestAgent(unittest.TestCase):
 
     @patch("src.agent.agent.Agent._timed_completion")
     def test_invalid_json_args_produce_expected_tool_error_response(self, mock_timed_completion):
-        mocked_final_response = SimpleNamespace(
+        mock_final_response = SimpleNamespace(
             choices=[
                 SimpleNamespace(
                     message=SimpleNamespace(
@@ -263,7 +263,7 @@ class TestAgent(unittest.TestCase):
         tools_schema = ProcessRequestSchema(
             user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
         )
-        mock_timed_completion.return_value = mocked_final_response
+        mock_timed_completion.return_value = mock_final_response
         self.agent.process_request(tools_schema, max_iterations=1)
 
         last_call = mock_timed_completion.call_args
@@ -276,7 +276,7 @@ class TestAgent(unittest.TestCase):
 
     @patch("src.agent.agent.Agent._timed_completion")
     def test_send_draft_for_approval_rejects_empty_draft(self, mock_timed_completion):
-        mocked_final_response = SimpleNamespace(
+        mock_final_response = SimpleNamespace(
             choices=[
                 SimpleNamespace(
                     message=SimpleNamespace(
@@ -292,7 +292,7 @@ class TestAgent(unittest.TestCase):
             ]
         )
 
-        mock_timed_completion.return_value = mocked_final_response
+        mock_timed_completion.return_value = mock_final_response
 
         tool_schema = ProcessRequestSchema(
             user_prompt="test prompt", llm_tool_schema=None, system_message="test system_message"
@@ -306,3 +306,37 @@ class TestAgent(unittest.TestCase):
 
         assert "Error: send_draft_for_approval requires a draft object." in tool_message["content"]
         self.mock_draft_approval_handler.send_draft_for_approval.assert_not_called()
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_tool_arg_typeerror_converts_into_error_response(self, mock_timed_completion):
+        mock_final_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="01",
+                                function=SimpleNamespace(name="create_draft", arguments="{}"),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+
+        mock_timed_completion.return_value = mock_final_response
+        self.mock_gmail_writer.create_draft.side_effect = TypeError
+
+        tools_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        self.agent.process_request(tools_schema, max_iterations=1)
+
+        last_call = mock_timed_completion.call_args
+        messages = last_call.kwargs["messages"]
+
+        tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
+        assert "Error: Could not call create_draft due to argument mismatch." in tool_message["content"]
+        self.mock_gmail_writer.create_draft.assert_called_once()
