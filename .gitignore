@@ -1,4 +1,6 @@
 # Local files and API keys
+AGENTS.md
+CLAUDE.md
 credentials.json
 token.json
 .cursor/
