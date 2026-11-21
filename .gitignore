@@ -1,4 +1,6 @@
 # Local files and API keys
+AGENTS.md
+CLAUDE.md
 credentials.json
 token.json
 .cursor/
@@ -10,6 +12,7 @@ token.json
 *.envrc
 .inbox_zero.egg-info/
 .venv/
+.vscode/
 demos/
 Inbox0.egg-info
 logs/
