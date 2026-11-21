@@ -381,3 +381,25 @@ class TestAgent(unittest.TestCase):
         )
 
         assert tool_message["content"] == "<draft>"
+
+        @patch("src.agent.agent.Agent._timed_completion")
+        def test_multi_tool_call_preserves_message_history(self, mock_timed_completion):
+
+            mock_timed_completion.side_effect = ["some_tooles"]
+
+        @staticmethod
+        def _make_tool_call(tool_call_id, name, arguments="{}"):
+            return SimpleNamespace(id=tool_call_id, function=SimpleNamespace(name=name, arguments=arguments))
+
+        @staticmethod
+        def _make_response(content, tool_calls):
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content=content,
+                            tool_calls=tool_calls,
+                        )
+                    )
+                ]
+            )
