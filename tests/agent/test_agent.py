@@ -382,24 +382,49 @@ class TestAgent(unittest.TestCase):
 
         assert tool_message["content"] == "<draft>"
 
-        @patch("src.agent.agent.Agent._timed_completion")
-        def test_multi_tool_call_preserves_message_history(self, mock_timed_completion):
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_multi_tool_call_preserves_message_history(self, mock_timed_completion):
+        mock_timed_completion.side_effect = [
+            self._make_response("", self._make_tool_call(tool_call_id="01", name="read_emails")),
+            self._make_response("", self._make_tool_call(tool_call_id="02", name="create_draft")),
+            self._make_response("Done", None),
+        ]
 
-            mock_timed_completion.side_effect = ["some_tooles"]
+        tools_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+        )
 
-        @staticmethod
-        def _make_tool_call(tool_call_id, name, arguments="{}"):
-            return SimpleNamespace(id=tool_call_id, function=SimpleNamespace(name=name, arguments=arguments))
+        result = self.agent.process_request(tools_schema, max_iterations=5)
 
-        @staticmethod
-        def _make_response(content, tool_calls):
-            return SimpleNamespace(
-                choices=[
-                    SimpleNamespace(
-                        message=SimpleNamespace(
-                            content=content,
-                            tool_calls=tool_calls,
-                        )
+        last_call = mock_timed_completion.call_args
+
+        messages = last_call.kwargs["messages"]
+        tool_messages = [m for m in messages if isinstance(m, dict) and m.get("role") == "tool"]
+
+        tools = [("read_emails", "01"), ("create_draft", "02")]
+
+        assert len(tools) == len(tool_messages)
+
+        for tool, tool_message in zip(tools, tool_messages):
+            assert tool[0] == tool_message["name"]
+            assert tool[1] == tool_message["tool_call_id"]
+
+        assert mock_timed_completion.call_count == 3
+        assert result == "Done"
+
+    @staticmethod
+    def _make_tool_call(tool_call_id, name, arguments="{}"):
+        return [SimpleNamespace(id=tool_call_id, function=SimpleNamespace(name=name, arguments=arguments))]
+
+    @staticmethod
+    def _make_response(content, tool_calls):
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=content,
+                        tool_calls=tool_calls,
                     )
-                ]
-            )
+                )
+            ]
+        )
