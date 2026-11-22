@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="Description of image" width="600">
+  <img src="assets/banner.png" alt="Inbox0 banner" width="600">
 </p>
 
 <p align="center">
@@ -25,7 +25,7 @@ An AI assistant that reads your Gmail, summarizes your day’s to‑dos, and dra
 - **Smart Summarization**: Automatically reads your recent unread emails and generates a high-level daily summary, highlighting key themes and urgent items.
 
 <p align="center">
-  <img src="assets/Email Summary.png" alt="Description of image" width="800">
+  <img src="assets/Email Summary.png" alt="Example daily email summary" width="800">
 </p>
 
 - **Actionable Insights**: Analyzes each email to determine if a response is required, filtering out spam and promotional content while flagging important messages from clients or colleagues.
@@ -53,7 +53,7 @@ An AI assistant that reads your Gmail, summarizes your day’s to‑dos, and dra
   - **State Management**: The workflow pauses for your input and seamlessly resumes after you take action. 
 
 <p align="center">
-  <img src="assets/Slack HITL Preview.png" alt="Description of image" width="800">
+  <img src="assets/Slack HITL Preview.png" alt="Slack draft approval message" width="800">
 </p>
 
 ### Seamless Orchestration
@@ -222,8 +222,8 @@ Four components ship together:
 
 - **Triage classifier** — a lightweight gate that decides which emails warrant a drafted response, dropping cost and latency on inbox noise before the expensive LLM runs. Tracked in [#47](https://github.com/ksharma6/Inbox0/issues/47).
 - **Long/short-term semantic memory** — a two-tier retrieval layer giving the agent access to the rich context in the user's inbox, across both years of history (SQLite-vec persistent store) and the current week's active work (Redis working-set cache with last-access TTL). Tracked in [#17](https://github.com/ksharma6/Inbox0/issues/17).
-- **Pipeline evaluation harness** — tracks draft quality, triage accuracy, retrieval relevance, cost, latency, and token usage across the full pipeline. Establishes baselines on every component, runs on every change, and ingests implicit feedback as continuous quality signal. Design: [gold metrics](docs/decisions/evaluation/001-gold_metrics.md) define the three system-level signals; the [evaluation harness](docs/decisions/evaluation/003-eval_harness.md) is the three-tier engine that computes them. Tracked in [#TBD].
-- **Implicit feedback collection** — instruments the Slack approval flow plus Gmail folder state to measure user satisfaction without asking. Tracks whether each draft was sent, how much it was edited before sending, and distinguishes drafter failures from classifier failures on discards. The zero-risk [shadow mode](docs/decisions/evaluation/002-shadow_mode.md) collection layer bootstraps this dataset before any real send. Tracked in [#TBD].
+- **Pipeline evaluation harness** — tracks draft quality, triage accuracy, retrieval relevance, cost, latency, and token usage across the full pipeline. Establishes baselines on every component, runs on every change, and ingests implicit feedback as continuous quality signal. Three system-level gold metrics are computed by a three-tier evaluation engine.
+- **Implicit feedback collection** — instruments the Slack approval flow plus Gmail folder state to measure user satisfaction without asking. Tracks whether each draft was sent, how much it was edited before sending, and distinguishes drafter failures from classifier failures on discards. A zero-risk shadow mode collection layer bootstraps this dataset before any real send.
 
 Track v1.0 progress at the [v1.0 milestone page](https://github.com/ksharma6/Inbox0/milestone/1).
 
