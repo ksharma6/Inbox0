@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/ksharma6/Inbox0/actions/workflows/ci.yml"><img src="https://github.com/ksharma6/Inbox0/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <!-- <a href="https://codecov.io/gh/ksharma6/Inbox0"><img src="https://codecov.io/gh/ksharma6/Inbox0/branch/main/graph/badge.svg" alt="Coverage"></a> -->
+   <a href="https://codecov.io/gh/ksharma6/Inbox0"><img src="https://codecov.io/gh/ksharma6/Inbox0/branch/main/graph/badge.svg" alt="Coverage"></a> 
   <a href="https://python.org"><img src="https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=yellow" alt="Python"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-2A5F4F" alt="License"></a>
   <a href="https://langchain-ai.github.io/langgraph/"><img src="https://img.shields.io/badge/Built%20with-LangGraph-7C3AED?logo=graphql&logoColor=white" alt="LangGraph"></a>
@@ -252,4 +252,3 @@ The longer-term direction is an agent that learns to read, write, and make decis
 
 - Do not commit `credentials.json` or `token.json`
 - Keep API keys in `.env` or your secret manager
-
