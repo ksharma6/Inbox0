@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -6,7 +7,7 @@ from openai import APIConnectionError
 from src.agent.agent import Agent
 from src.gmail.gmail_reader import GmailReader
 from src.gmail.gmail_writer import GmailWriter
-from src.models.agent_schemas import AgentSchema
+from src.models.agent_schemas import AgentSchema, ProcessRequestSchema
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
 from tenacity import wait_none
 
@@ -108,3 +109,322 @@ class TestAgent(unittest.TestCase):
         self.agent._create_chat_completion(model="test-model", messages=messages)
         create_completion = self.agent.client.chat.completions.create
         create_completion.assert_called_once_with(model="test-model", messages=messages)
+
+    @patch("src.agent.agent.tiktoken")
+    def test_estimate_prompt_tokens_uses_model_encoding(self, mock_tiktoken):
+        """Use the model-specific tokenizer when the model has a known encoding."""
+        encoder = mock_tiktoken.encoding_for_model.return_value
+        encoder.encode.side_effect = lambda x: list(x)
+
+        messages = [{"role": "system", "content": "hello world"}, {"role": "system", "content": None}]
+
+        total = self.agent._estimate_prompt_tokens(messages=messages)
+
+        self.assertEqual(total, 11)
+        mock_tiktoken.encoding_for_model.assert_called_once_with(self.agent.schema.model)
+        mock_tiktoken.get_encoding.assert_not_called()
+
+    @patch("src.agent.agent.tiktoken")
+    def test_estimate_prompt_tokens_uses_cl100k_base_encoding(self, mock_tiktoken):
+        """Fall back to the cl100k_base tokenizer for an unknown model."""
+        mock_tiktoken.encoding_for_model.side_effect = KeyError()
+        encoder = mock_tiktoken.get_encoding.return_value
+        encoder.encode.side_effect = lambda x: list(x)
+
+        messages = [{"role": "system", "content": "hello world"}, {"role": "system", "content": None}]
+
+        total = self.agent._estimate_prompt_tokens(messages=messages)
+        self.assertEqual(11, total)
+
+        mock_tiktoken.get_encoding.assert_called_once_with("cl100k_base")
+        mock_tiktoken.encoding_for_model.assert_called()
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_process_request_returns_content_when_no_tool_calls(self, mock_timed_completion):
+        """Return the assistant content when the response has no tool calls."""
+        mock_response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(tool_calls=None, content="final answer"))]
+        )
+
+        mock_timed_completion.return_value = mock_response
+
+        no_tools_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        x = self.agent.process_request(no_tools_schema)
+
+        assert x == "final answer"
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_max_iterations_terminates_tool_calls(self, mock_timed_completion):
+        """Return the final response when processing reaches its iteration limit."""
+        mock_final_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="final answer",
+                        tool_calls=[
+                            SimpleNamespace(id="01", function=SimpleNamespace(name="read_emails", arguments="{}"))
+                        ],
+                    )
+                )
+            ]
+        )
+        mock_timed_completion.return_value = mock_final_response
+
+        tools_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        final_response = self.agent.process_request(tools_schema, max_iterations=1)
+
+        assert final_response == "final answer"
+        assert mock_timed_completion.call_count == 2
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_unknown_tool_names_create_informative_tool_response(self, mock_timed_completion):
+        mock_final_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="01",
+                                function=SimpleNamespace(name="gmail_wr1ter", arguments="{}"),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+        mock_timed_completion.return_value = mock_final_response
+
+        tools_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        self.agent.process_request(tools_schema, max_iterations=1)
+
+        last_call = mock_timed_completion.call_args.kwargs
+        messages = last_call["messages"]
+        tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
+
+        assert "is not available" in tool_message["content"]
+        assert tool_message["name"] == "gmail_wr1ter"
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_read_email_invoked_with_invalid_json(self, mock_timed_completion):
+        mock_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="01",
+                                function=SimpleNamespace(
+                                    name="read_emails", arguments="{silly_name: very wrong json lol}"
+                                ),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+
+        mock_timed_completion.return_value = mock_response
+        tools_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        self.agent.process_request(tools_schema, max_iterations=1)
+
+        self.mock_gmail_reader.read_emails.assert_called_once_with()
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_invalid_json_args_produce_expected_tool_error_response(self, mock_timed_completion):
+        mock_final_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="01",
+                                function=SimpleNamespace(name="send_draft_for_approval", arguments="{invalid_json}"),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+        tools_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+        mock_timed_completion.return_value = mock_final_response
+        self.agent.process_request(tools_schema, max_iterations=1)
+
+        last_call = mock_timed_completion.call_args
+        messages = last_call.kwargs["messages"]
+        tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
+
+        assert "Error: Invalid arguments for " in tool_message["content"]
+        assert tool_message["name"] == "send_draft_for_approval"
+        self.mock_draft_approval_handler.send_draft_for_approval.assert_not_called()
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_send_draft_for_approval_rejects_empty_draft(self, mock_timed_completion):
+        mock_final_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="01",
+                                function=SimpleNamespace(name="send_draft_for_approval", arguments='{"draft": ""}'),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+
+        mock_timed_completion.return_value = mock_final_response
+
+        tool_schema = ProcessRequestSchema(
+            user_prompt="test prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        self.agent.process_request(tool_schema, max_iterations=1)
+
+        last_call = mock_timed_completion.call_args
+        messages = last_call.kwargs["messages"]
+        tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
+
+        assert "Error: send_draft_for_approval requires a draft object." in tool_message["content"]
+        self.mock_draft_approval_handler.send_draft_for_approval.assert_not_called()
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_tool_arg_typeerror_converts_into_error_response(self, mock_timed_completion):
+        mock_final_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="01",
+                                function=SimpleNamespace(name="create_draft", arguments="{}"),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+
+        mock_timed_completion.return_value = mock_final_response
+        self.mock_gmail_writer.create_draft.side_effect = TypeError
+
+        tools_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        self.agent.process_request(tools_schema, max_iterations=1)
+
+        last_call = mock_timed_completion.call_args
+        messages = last_call.kwargs["messages"]
+
+        tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
+        assert "Error: Could not call create_draft due to argument mismatch." in tool_message["content"]
+        self.mock_gmail_writer.create_draft.assert_called_once()
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_valid_tool_call_dispatches_decoded_args(self, mock_timed_completion):
+        mock_final_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="01",
+                                function=SimpleNamespace(
+                                    name="create_draft",
+                                    arguments=(
+                                        '{"sender": "test", "recipient": "test", "subject": "test", "message": "test"}'
+                                    ),
+                                ),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+        mock_timed_completion.return_value = mock_final_response
+        self.mock_gmail_writer.create_draft.return_value = "<draft>"
+
+        tools_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        self.agent.process_request(tools_schema, max_iterations=1)
+
+        last_call = mock_timed_completion.call_args
+        messages = last_call.kwargs["messages"]
+        tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
+
+        self.mock_gmail_writer.create_draft.assert_called_once_with(
+            sender="test", recipient="test", subject="test", message="test"
+        )
+
+        assert tool_message["content"] == "<draft>"
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_multi_tool_call_preserves_message_history(self, mock_timed_completion):
+        mock_timed_completion.side_effect = [
+            self._make_response("", self._make_tool_call(tool_call_id="01", name="read_emails")),
+            self._make_response("", self._make_tool_call(tool_call_id="02", name="create_draft")),
+            self._make_response("Done", None),
+        ]
+
+        tools_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        result = self.agent.process_request(tools_schema, max_iterations=5)
+
+        last_call = mock_timed_completion.call_args
+
+        messages = last_call.kwargs["messages"]
+        tool_messages = [m for m in messages if isinstance(m, dict) and m.get("role") == "tool"]
+
+        tools = [("read_emails", "01"), ("create_draft", "02")]
+
+        assert len(tools) == len(tool_messages)
+
+        for tool, tool_message in zip(tools, tool_messages):
+            assert tool[0] == tool_message["name"]
+            assert tool[1] == tool_message["tool_call_id"]
+
+        assert mock_timed_completion.call_count == 3
+        assert result == "Done"
+
+    @staticmethod
+    def _make_tool_call(tool_call_id, name, arguments="{}"):
+        return [SimpleNamespace(id=tool_call_id, function=SimpleNamespace(name=name, arguments=arguments))]
+
+    @staticmethod
+    def _make_response(content, tool_calls):
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=content,
+                        tool_calls=tool_calls,
+                    )
+                )
+            ]
+        )
