@@ -42,18 +42,18 @@ class TestAgent(unittest.TestCase):
 
     def test_initialization(self):
         """Test that Agent initializes with schema and available tools."""
-        self.assertEqual(self.agent.schema, self.agent_schema)
+        assert self.agent.schema == self.agent_schema
 
-        self.assertIn("create_draft", self.agent.function_map)
-        self.assertIn("read_emails", self.agent.function_map)
-        self.assertIn("send_draft_for_approval", self.agent.function_map)
+        assert "create_draft" in self.agent.function_map
+        assert "read_emails" in self.agent.function_map
+        assert "send_draft_for_approval" in self.agent.function_map
 
         # Verify methods are correctly mapped to their specific handlers
-        self.assertEqual(self.agent.function_map["create_draft"], self.mock_gmail_writer.create_draft)
-        self.assertEqual(self.agent.function_map["read_emails"], self.mock_gmail_reader.read_emails)
-        self.assertEqual(
-            self.agent.function_map["send_draft_for_approval"],
-            self.mock_draft_approval_handler.send_draft_for_approval,
+        assert self.agent.function_map["create_draft"] == self.mock_gmail_writer.create_draft
+        assert self.agent.function_map["read_emails"] == self.mock_gmail_reader.read_emails
+        assert (
+            self.agent.function_map["send_draft_for_approval"]
+            == self.mock_draft_approval_handler.send_draft_for_approval
         )
 
     def test_create_chat_completion_retries_transient_failure(self):
@@ -73,8 +73,8 @@ class TestAgent(unittest.TestCase):
             messages=[{"role": "user", "content": "hello"}],
         )
 
-        self.assertEqual(result, expected_response)
-        self.assertEqual(create.call_count, 2)
+        assert result == expected_response
+        assert create.call_count == 2
 
     def test_openrouter_chat_completion_privacy(self):
         """OpenRouter requests require ZDR and deny provider data collection."""
@@ -86,7 +86,7 @@ class TestAgent(unittest.TestCase):
         messages = [{"role": "user", "content": "hello"}]
         result = self.agent._create_chat_completion(model="test-model", messages=messages)
 
-        self.assertEqual(result, expected_response)
+        assert result == expected_response
 
         create_completion = self.agent.client.chat.completions.create
 
@@ -120,7 +120,7 @@ class TestAgent(unittest.TestCase):
 
         total = self.agent._estimate_prompt_tokens(messages=messages)
 
-        self.assertEqual(total, 11)
+        assert total == 11
         mock_tiktoken.encoding_for_model.assert_called_once_with(self.agent.schema.model)
         mock_tiktoken.get_encoding.assert_not_called()
 
@@ -134,10 +134,27 @@ class TestAgent(unittest.TestCase):
         messages = [{"role": "system", "content": "hello world"}, {"role": "system", "content": None}]
 
         total = self.agent._estimate_prompt_tokens(messages=messages)
-        self.assertEqual(11, total)
+        assert 11 == total
 
         mock_tiktoken.get_encoding.assert_called_once_with("cl100k_base")
         mock_tiktoken.encoding_for_model.assert_called()
+
+    @staticmethod
+    def _make_tool_call(tool_call_id, name, arguments="{}"):
+        return [SimpleNamespace(id=tool_call_id, function=SimpleNamespace(name=name, arguments=arguments))]
+
+    @staticmethod
+    def _make_response(content, tool_calls):
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=content,
+                        tool_calls=tool_calls,
+                    )
+                )
+            ]
+        )
 
     @patch("src.agent.agent.Agent._timed_completion")
     def test_process_request_returns_content_when_no_tool_calls(self, mock_timed_completion):
@@ -411,20 +428,3 @@ class TestAgent(unittest.TestCase):
 
         assert mock_timed_completion.call_count == 3
         assert result == "Done"
-
-    @staticmethod
-    def _make_tool_call(tool_call_id, name, arguments="{}"):
-        return [SimpleNamespace(id=tool_call_id, function=SimpleNamespace(name=name, arguments=arguments))]
-
-    @staticmethod
-    def _make_response(content, tool_calls):
-        return SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content=content,
-                        tool_calls=tool_calls,
-                    )
-                )
-            ]
-        )
