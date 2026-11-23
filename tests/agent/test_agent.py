@@ -260,11 +260,21 @@ class TestAgent(unittest.TestCase):
         )
 
         mock_timed_completion.return_value = mock_response
+        self.mock_gmail_reader.read_emails.return_value = "<email>"
+
         tools_schema = ProcessRequestSchema(
             user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
         )
 
         self.agent.process_request(tools_schema, max_iterations=1)
+        last_call = mock_timed_completion.call_args
+        messages = last_call.kwargs["messages"]
+        tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
+
+        assert tool_message["tool_call_id"] == "01"
+        assert tool_message["name"] == "read_emails"
+
+        assert tool_message["content"] == "<email>"
 
         self.mock_gmail_reader.read_emails.assert_called_once_with()
 
