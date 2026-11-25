@@ -8,6 +8,7 @@ from src.agent.agent import Agent
 from src.gmail.gmail_reader import GmailReader
 from src.gmail.gmail_writer import GmailWriter
 from src.models.agent_schemas import AgentSchema, ProcessRequestSchema
+from src.models.gmail import GmailReaderToolFunction
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
 from tenacity import wait_none
 
@@ -35,6 +36,8 @@ class TestAgent(unittest.TestCase):
                 "approval_handler": self.mock_draft_approval_handler,
             },
         )
+
+        self.read_emails_schema = GmailReaderToolFunction.generate_read_emails_schema()
 
         with patch("openai.OpenAI") as mock_openai:
             self.agent = Agent(self.agent_schema)
@@ -196,20 +199,36 @@ class TestAgent(unittest.TestCase):
     @patch("src.agent.agent.Agent._timed_completion")
     def test_max_iterations_terminates_tool_calls(self, mock_timed_completion):
         """Return the final response when processing reaches its iteration limit."""
-        mock_final_response = self._make_response(
-            content="Final answer",
-            tool_calls=self._make_tool_call(tool_call_id="01", name="read_emails", arguments="{}"),
-        )
 
-        mock_timed_completion.return_value = mock_final_response
+        mock_timed_completion.side_effect = [
+            (
+                self._make_response(
+                    content="",
+                    tool_calls=self._make_tool_call(tool_call_id="01", name="read_emails", arguments="{}"),
+                )
+            ),
+            self._make_response(content="Final response", tool_calls=None),
+        ]
 
         tools_schema = ProcessRequestSchema(
-            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+            user_prompt="test user_prompt",
+            llm_tool_schema=self.read_emails_schema,
+            system_message="test system_message",
         )
 
         final_response = self.agent.process_request(tools_schema, max_iterations=1)
 
-        assert final_response == "Final answer"
+        calls = mock_timed_completion.call_args_list
+        loop_call = calls[0].kwargs
+        final_call = calls[-1].kwargs
+
+        assert loop_call["tools"]
+        assert loop_call["tool_choice"] == "auto"
+
+        assert final_call.get("tools") is None
+        assert final_call.get("tool_choice") is None
+
+        assert final_response == "Final response"
         assert mock_timed_completion.call_count == 2
 
     @patch("src.agent.agent.Agent._timed_completion")
@@ -242,8 +261,8 @@ class TestAgent(unittest.TestCase):
 
         self.agent.process_request(tools_schema, max_iterations=1)
 
-        last_call = mock_timed_completion.call_args.kwargs
-        messages = last_call["messages"]
+        last_call = mock_timed_completion.call_args
+        messages = last_call.kwargs["messages"]
         tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
 
         assert "is not available" in tool_message["content"]
