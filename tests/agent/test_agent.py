@@ -39,13 +39,15 @@ class TestAgent(unittest.TestCase):
 
         self.read_emails_schema = GmailReaderToolFunction.generate_read_emails_schema()
 
-        with patch("openai.OpenAI") as mock_openai:
+        with patch("src.agent.agent.OpenAI") as mock_openai:
             self.agent = Agent(self.agent_schema)
             self.mock_openai_client = mock_openai.return_value
 
     def test_initialization(self):
         """Test that Agent initializes with schema and available tools."""
         assert self.agent.schema == self.agent_schema
+
+        assert self.mock_openai_client is self.agent.client
 
         assert "create_draft" in self.agent.function_map
         assert "read_emails" in self.agent.function_map
@@ -66,8 +68,7 @@ class TestAgent(unittest.TestCase):
             message="temporary connection failure",
             request=httpx.Request("POST", "https://example.test/v1/chat/completions"),
         )
-        self.agent.client = MagicMock()
-        create = self.agent.client.chat.completions.create
+        create = self.mock_openai_client.chat.completions.create
         create.side_effect = [transient_error, expected_response]
 
         result = self.agent._create_chat_completion.retry_with(wait=wait_none())(
@@ -82,15 +83,14 @@ class TestAgent(unittest.TestCase):
     def test_openrouter_chat_completion_privacy(self):
         """OpenRouter requests require ZDR and deny provider data collection."""
         self.agent.schema.base_url = "https://openrouter.ai/api/v1"
-        self.agent.client = MagicMock()
-        expected_response = self.agent.client.chat.completions.create.return_value
+        expected_response = self.mock_openai_client.chat.completions.create.return_value
 
         messages = [{"role": "user", "content": "hello"}]
         result = self.agent._create_chat_completion(model="test-model", messages=messages)
 
         assert result == expected_response
 
-        create_completion = self.agent.client.chat.completions.create
+        create_completion = self.mock_openai_client.chat.completions.create
 
         create_completion.assert_called_once_with(
             model="test-model",
@@ -106,10 +106,9 @@ class TestAgent(unittest.TestCase):
     def test_non_openrouter_chat_completion_omits_openrouter_fields(self):
         """Non-OpenRouter requests do not receive OpenRouter-specific fields"""
         self.agent.schema.base_url = "http://localhost:11434/v1"
-        self.agent.client = MagicMock()
         messages = [{"role": "user", "content": "hello"}]
         self.agent._create_chat_completion(model="test-model", messages=messages)
-        create_completion = self.agent.client.chat.completions.create
+        create_completion = self.mock_openai_client.chat.completions.create
         create_completion.assert_called_once_with(model="test-model", messages=messages)
 
     @patch("src.agent.agent.tiktoken")
