@@ -19,9 +19,10 @@ class TestAgent(unittest.TestCase):
     def setUp(self):
         """Set up the test environment by:
         1. Creating mock objects for GmailWriter, GmailReader, and DraftApprovalHandler.
-        2. Creating a mock agent_schema to configure the Agent.
-        3. Creating a mock OpenAI client to configure the Agent.
-        4. Creating an Agent instance using the agent_schema and the mock OpenAI client.
+        2. Creating an AgentSchema that registers those mocks as the Agent's tools.
+        3. Building the real read_emails ToolFunction schema for tests that offer tools.
+        4. Patching OpenAI in src.agent.agent and creating an Agent instance, so the
+           Agent's client is the mock stored in self.mock_openai_client.
         """
         self.mock_gmail_writer = MagicMock(spec=GmailWriter)
         self.mock_gmail_reader = MagicMock(spec=GmailReader)
@@ -54,11 +55,11 @@ class TestAgent(unittest.TestCase):
         assert "send_draft_for_approval" in self.agent.function_map
 
         # Verify methods are correctly mapped to their specific handlers
-        assert self.agent.function_map["create_draft"] == self.mock_gmail_writer.create_draft
-        assert self.agent.function_map["read_emails"] == self.mock_gmail_reader.read_emails
+        assert self.agent.function_map["create_draft"] is self.mock_gmail_writer.create_draft
+        assert self.agent.function_map["read_emails"] is self.mock_gmail_reader.read_emails
         assert (
             self.agent.function_map["send_draft_for_approval"]
-            == self.mock_draft_approval_handler.send_draft_for_approval
+            is self.mock_draft_approval_handler.send_draft_for_approval
         )
 
     def test_create_chat_completion_retries_transient_failure(self):
@@ -135,7 +136,7 @@ class TestAgent(unittest.TestCase):
         messages = [{"role": "system", "content": "hello world"}, {"role": "system", "content": None}]
 
         total = self.agent._estimate_prompt_tokens(messages=messages)
-        assert 11 == total
+        assert total == 11
 
         mock_tiktoken.get_encoding.assert_called_once_with("cl100k_base")
         mock_tiktoken.encoding_for_model.assert_called()
@@ -198,13 +199,10 @@ class TestAgent(unittest.TestCase):
     @patch("src.agent.agent.Agent._timed_completion")
     def test_max_iterations_terminates_tool_calls(self, mock_timed_completion):
         """Return the final response when processing reaches its iteration limit."""
-
         mock_timed_completion.side_effect = [
-            (
-                self._make_response(
-                    content="",
-                    tool_calls=self._make_tool_call(tool_call_id="01", name="read_emails", arguments="{}"),
-                )
+            self._make_response(
+                content="",
+                tool_calls=self._make_tool_call(tool_call_id="01", name="read_emails"),
             ),
             self._make_response(content="Final response", tool_calls=None),
         ]
@@ -234,24 +232,9 @@ class TestAgent(unittest.TestCase):
     def test_unknown_tool_names_create_informative_tool_response(self, mock_timed_completion):
         """Append a 'not available' tool message when the model requests an unregistered function."""
         mock_final_response = self._make_response(
-            content="", tool_calls=self._make_tool_call(tool_call_id="01", name="gmail_wr1ter", arguments="{}")
+            content="", tool_calls=self._make_tool_call(tool_call_id="01", name="gmail_wr1ter")
         )
 
-        SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content="",
-                        tool_calls=[
-                            SimpleNamespace(
-                                id="01",
-                                function=SimpleNamespace(name="gmail_wr1ter", arguments="{}"),
-                            )
-                        ],
-                    )
-                )
-            ]
-        )
         mock_timed_completion.return_value = mock_final_response
 
         tools_schema = ProcessRequestSchema(
@@ -349,7 +332,7 @@ class TestAgent(unittest.TestCase):
     def test_tool_arg_typeerror_converts_into_error_response(self, mock_timed_completion):
         """Append an argument-mismatch tool message when the tool raises TypeError."""
         mock_final_response = self._make_response(
-            content="", tool_calls=self._make_tool_call(tool_call_id="01", name="create_draft", arguments="{}")
+            content="", tool_calls=self._make_tool_call(tool_call_id="01", name="create_draft")
         )
 
         mock_timed_completion.return_value = mock_final_response
@@ -371,12 +354,12 @@ class TestAgent(unittest.TestCase):
     @patch("src.agent.agent.Agent._timed_completion")
     def test_valid_tool_call_dispatches_decoded_args(self, mock_timed_completion):
         """Call the tool with JSON-decoded keyword arguments and append its result as the tool message."""
-        mock_final_response = mock_final_response = self._make_response(
+        mock_final_response = self._make_response(
             content="",
             tool_calls=self._make_tool_call(
                 tool_call_id="01",
                 name="create_draft",
-                arguments=('{"sender": "test", "recipient": "test", "subject": "test", "message": "test"}'),
+                arguments='{"sender": "test", "recipient": "test", "subject": "test", "message": "test"}',
             ),
         )
 
