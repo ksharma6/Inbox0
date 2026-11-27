@@ -40,8 +40,12 @@ class TestAgent(unittest.TestCase):
 
         self.read_emails_schema = GmailReaderToolFunction.generate_read_emails_schema()
 
-        with patch("src.agent.agent.OpenAI") as mock_openai:
+        with (
+            patch("src.agent.agent.OpenAI") as mock_openai,
+            patch("src.agent.agent.UsageTracker") as mock_usagetracker,
+        ):
             self.agent = Agent(self.agent_schema)
+            self.mock_usage_tracker = mock_usagetracker.return_value
             self.mock_openai_client = mock_openai.return_value
 
     def test_initialization(self):
@@ -49,6 +53,7 @@ class TestAgent(unittest.TestCase):
         assert self.agent.schema == self.agent_schema
 
         assert self.mock_openai_client is self.agent.client
+        assert self.mock_usage_tracker is self.agent.usage_tracker
 
         assert "create_draft" in self.agent.function_map
         assert "read_emails" in self.agent.function_map
