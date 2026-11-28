@@ -1,3 +1,4 @@
+import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -8,6 +9,8 @@ from src.agent.agent import Agent
 from src.gmail.gmail_reader import GmailReader
 from src.gmail.gmail_writer import GmailWriter
 from src.models.agent_schemas import AgentSchema, ProcessRequestSchema
+from src.models.gmail import GmailReaderToolFunction
+from src.models.slack import SlackToolFunction
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
 from tenacity import wait_none
 
@@ -18,9 +21,10 @@ class TestAgent(unittest.TestCase):
     def setUp(self):
         """Set up the test environment by:
         1. Creating mock objects for GmailWriter, GmailReader, and DraftApprovalHandler.
-        2. Creating a mock agent_schema to configure the Agent.
-        3. Creating a mock OpenAI client to configure the Agent.
-        4. Creating an Agent instance using the agent_schema and the mock OpenAI client.
+        2. Creating an AgentSchema that registers those mocks as the Agent's tools.
+        3. Building the real read_emails ToolFunction schema for tests that offer tools.
+        4. Patching OpenAI in src.agent.agent and creating an Agent instance, so the
+           Agent's client is the mock stored in self.mock_openai_client.
         """
         self.mock_gmail_writer = MagicMock(spec=GmailWriter)
         self.mock_gmail_reader = MagicMock(spec=GmailReader)
@@ -36,24 +40,34 @@ class TestAgent(unittest.TestCase):
             },
         )
 
-        with patch("openai.OpenAI") as mock_openai:
+        self.read_emails_schema = GmailReaderToolFunction.generate_read_emails_schema()
+        self.send_draft_for_approval_schema = SlackToolFunction.generate_send_draft_for_approval_schema()
+
+        with (
+            patch("src.agent.agent.OpenAI") as mock_openai,
+            patch("src.agent.agent.UsageTracker") as mock_usagetracker,
+        ):
             self.agent = Agent(self.agent_schema)
+            self.mock_usage_tracker = mock_usagetracker.return_value
             self.mock_openai_client = mock_openai.return_value
 
     def test_initialization(self):
         """Test that Agent initializes with schema and available tools."""
-        self.assertEqual(self.agent.schema, self.agent_schema)
+        assert self.agent.schema == self.agent_schema
 
-        self.assertIn("create_draft", self.agent.function_map)
-        self.assertIn("read_emails", self.agent.function_map)
-        self.assertIn("send_draft_for_approval", self.agent.function_map)
+        assert self.mock_openai_client is self.agent.client
+        assert self.mock_usage_tracker is self.agent.usage_tracker
+
+        assert "create_draft" in self.agent.function_map
+        assert "read_emails" in self.agent.function_map
+        assert "send_draft_for_approval" in self.agent.function_map
 
         # Verify methods are correctly mapped to their specific handlers
-        self.assertEqual(self.agent.function_map["create_draft"], self.mock_gmail_writer.create_draft)
-        self.assertEqual(self.agent.function_map["read_emails"], self.mock_gmail_reader.read_emails)
-        self.assertEqual(
-            self.agent.function_map["send_draft_for_approval"],
-            self.mock_draft_approval_handler.send_draft_for_approval,
+        assert self.agent.function_map["create_draft"] is self.mock_gmail_writer.create_draft
+        assert self.agent.function_map["read_emails"] is self.mock_gmail_reader.read_emails
+        assert (
+            self.agent.function_map["send_draft_for_approval"]
+            is self.mock_draft_approval_handler.send_draft_for_approval
         )
 
     def test_create_chat_completion_retries_transient_failure(self):
@@ -63,8 +77,7 @@ class TestAgent(unittest.TestCase):
             message="temporary connection failure",
             request=httpx.Request("POST", "https://example.test/v1/chat/completions"),
         )
-        self.agent.client = MagicMock()
-        create = self.agent.client.chat.completions.create
+        create = self.mock_openai_client.chat.completions.create
         create.side_effect = [transient_error, expected_response]
 
         result = self.agent._create_chat_completion.retry_with(wait=wait_none())(
@@ -73,22 +86,20 @@ class TestAgent(unittest.TestCase):
             messages=[{"role": "user", "content": "hello"}],
         )
 
-        self.assertEqual(result, expected_response)
-        self.assertEqual(create.call_count, 2)
+        assert result == expected_response
+        assert create.call_count == 2
 
     def test_openrouter_chat_completion_privacy(self):
         """OpenRouter requests require ZDR and deny provider data collection."""
         self.agent.schema.base_url = "https://openrouter.ai/api/v1"
-        self.agent.client = MagicMock()
-        expected_response = MagicMock()
-        expected_response = self.agent.client.chat.completions.create.return_value
+        expected_response = self.mock_openai_client.chat.completions.create.return_value
 
         messages = [{"role": "user", "content": "hello"}]
         result = self.agent._create_chat_completion(model="test-model", messages=messages)
 
-        self.assertEqual(result, expected_response)
+        assert result == expected_response
 
-        create_completion = self.agent.client.chat.completions.create
+        create_completion = self.mock_openai_client.chat.completions.create
 
         create_completion.assert_called_once_with(
             model="test-model",
@@ -104,10 +115,9 @@ class TestAgent(unittest.TestCase):
     def test_non_openrouter_chat_completion_omits_openrouter_fields(self):
         """Non-OpenRouter requests do not receive OpenRouter-specific fields"""
         self.agent.schema.base_url = "http://localhost:11434/v1"
-        self.agent.client = MagicMock()
         messages = [{"role": "user", "content": "hello"}]
         self.agent._create_chat_completion(model="test-model", messages=messages)
-        create_completion = self.agent.client.chat.completions.create
+        create_completion = self.mock_openai_client.chat.completions.create
         create_completion.assert_called_once_with(model="test-model", messages=messages)
 
     @patch("src.agent.agent.tiktoken")
@@ -120,7 +130,7 @@ class TestAgent(unittest.TestCase):
 
         total = self.agent._estimate_prompt_tokens(messages=messages)
 
-        self.assertEqual(total, 11)
+        assert total == 11
         mock_tiktoken.encoding_for_model.assert_called_once_with(self.agent.schema.model)
         mock_tiktoken.get_encoding.assert_not_called()
 
@@ -134,17 +144,54 @@ class TestAgent(unittest.TestCase):
         messages = [{"role": "system", "content": "hello world"}, {"role": "system", "content": None}]
 
         total = self.agent._estimate_prompt_tokens(messages=messages)
-        self.assertEqual(11, total)
+        assert total == 11
 
         mock_tiktoken.get_encoding.assert_called_once_with("cl100k_base")
         mock_tiktoken.encoding_for_model.assert_called()
 
+    @staticmethod
+    def _make_tool_call(tool_call_id, name, arguments="{}"):
+        """Build a one-element list of fake tool calls shaped like an OpenAI response.
+
+        Args:
+            tool_call_id (str): ID assigned to the tool call, echoed back in the tool message.
+            name (str): Name of the function the model is requesting.
+            arguments (str): JSON-encoded arguments string. Defaults to "{}".
+
+        Returns:
+            list[SimpleNamespace]: A list containing a single tool call with `id` and
+                `function.name` / `function.arguments` attributes.
+        """
+        return [SimpleNamespace(id=tool_call_id, function=SimpleNamespace(name=name, arguments=arguments))]
+
+    @staticmethod
+    def _make_response(content, tool_calls):
+        """Build a fake chat completion response with a single choice.
+
+        Args:
+            content (str): Assistant message content.
+            tool_calls (Optional[list[SimpleNamespace]]): Tool calls attached to the
+                message, or None for a response with no tool calls.
+
+        Returns:
+            SimpleNamespace: An object exposing `choices[0].message.content` and
+                `choices[0].message.tool_calls`.
+        """
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=content,
+                        tool_calls=tool_calls,
+                    )
+                )
+            ]
+        )
+
     @patch("src.agent.agent.Agent._timed_completion")
     def test_process_request_returns_content_when_no_tool_calls(self, mock_timed_completion):
         """Return the assistant content when the response has no tool calls."""
-        mock_response = SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(tool_calls=None, content="final answer"))]
-        )
+        mock_response = self._make_response(content="Final answer", tool_calls=None)
 
         mock_timed_completion.return_value = mock_response
 
@@ -152,53 +199,50 @@ class TestAgent(unittest.TestCase):
             user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
         )
 
-        x = self.agent.process_request(no_tools_schema)
+        final_response = self.agent.process_request(no_tools_schema)
 
-        assert x == "final answer"
+        assert final_response == "Final answer"
+        assert mock_timed_completion.call_count == 1
 
     @patch("src.agent.agent.Agent._timed_completion")
     def test_max_iterations_terminates_tool_calls(self, mock_timed_completion):
         """Return the final response when processing reaches its iteration limit."""
-        mock_final_response = SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content="final answer",
-                        tool_calls=[
-                            SimpleNamespace(id="01", function=SimpleNamespace(name="read_emails", arguments="{}"))
-                        ],
-                    )
-                )
-            ]
-        )
-        mock_timed_completion.return_value = mock_final_response
+        mock_timed_completion.side_effect = [
+            self._make_response(
+                content="",
+                tool_calls=self._make_tool_call(tool_call_id="01", name="read_emails"),
+            ),
+            self._make_response(content="Final response", tool_calls=None),
+        ]
 
         tools_schema = ProcessRequestSchema(
-            user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
+            user_prompt="test user_prompt",
+            llm_tool_schema=self.read_emails_schema,
+            system_message="test system_message",
         )
 
         final_response = self.agent.process_request(tools_schema, max_iterations=1)
 
-        assert final_response == "final answer"
+        calls = mock_timed_completion.call_args_list
+        loop_call = calls[0].kwargs
+        final_call = calls[-1].kwargs
+
+        assert loop_call["tools"]
+        assert loop_call["tool_choice"] == "auto"
+
+        assert final_call.get("tools") is None
+        assert final_call.get("tool_choice") is None
+
+        assert final_response == "Final response"
         assert mock_timed_completion.call_count == 2
 
     @patch("src.agent.agent.Agent._timed_completion")
     def test_unknown_tool_names_create_informative_tool_response(self, mock_timed_completion):
-        mock_final_response = SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content="",
-                        tool_calls=[
-                            SimpleNamespace(
-                                id="01",
-                                function=SimpleNamespace(name="gmail_wr1ter", arguments="{}"),
-                            )
-                        ],
-                    )
-                )
-            ]
+        """Append a 'not available' tool message when the model requests an unregistered function."""
+        mock_final_response = self._make_response(
+            content="", tool_calls=self._make_tool_call(tool_call_id="01", name="gmail_wr1ter")
         )
+
         mock_timed_completion.return_value = mock_final_response
 
         tools_schema = ProcessRequestSchema(
@@ -207,8 +251,8 @@ class TestAgent(unittest.TestCase):
 
         self.agent.process_request(tools_schema, max_iterations=1)
 
-        last_call = mock_timed_completion.call_args.kwargs
-        messages = last_call["messages"]
+        last_call = mock_timed_completion.call_args
+        messages = last_call.kwargs["messages"]
         tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
 
         assert "is not available" in tool_message["content"]
@@ -216,50 +260,43 @@ class TestAgent(unittest.TestCase):
 
     @patch("src.agent.agent.Agent._timed_completion")
     def test_read_email_invoked_with_invalid_json(self, mock_timed_completion):
-        mock_response = SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content="",
-                        tool_calls=[
-                            SimpleNamespace(
-                                id="01",
-                                function=SimpleNamespace(
-                                    name="read_emails", arguments="{silly_name: very wrong json lol}"
-                                ),
-                            )
-                        ],
-                    )
-                )
-            ]
+        """Call read_emails when its arguments string is not valid JSON."""
+        mock_response = self._make_response(
+            content="",
+            tool_calls=self._make_tool_call(
+                tool_call_id="01", name="read_emails", arguments="{silly_name: very wrong json lol}"
+            ),
         )
 
         mock_timed_completion.return_value = mock_response
+        self.mock_gmail_reader.read_emails.return_value = "<email>"
+
         tools_schema = ProcessRequestSchema(
             user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
         )
 
         self.agent.process_request(tools_schema, max_iterations=1)
+        last_call = mock_timed_completion.call_args
+        messages = last_call.kwargs["messages"]
+        tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
+
+        assert tool_message["tool_call_id"] == "01"
+        assert tool_message["name"] == "read_emails"
+
+        assert tool_message["content"] == "<email>"
 
         self.mock_gmail_reader.read_emails.assert_called_once_with()
 
     @patch("src.agent.agent.Agent._timed_completion")
     def test_invalid_json_args_produce_expected_tool_error_response(self, mock_timed_completion):
-        mock_final_response = SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content="",
-                        tool_calls=[
-                            SimpleNamespace(
-                                id="01",
-                                function=SimpleNamespace(name="send_draft_for_approval", arguments="{invalid_json}"),
-                            )
-                        ],
-                    )
-                )
-            ]
+        """Append an invalid-arguments tool message and skip the handler when arguments are not valid JSON."""
+        mock_final_response = self._make_response(
+            content="",
+            tool_calls=self._make_tool_call(
+                tool_call_id="01", name="send_draft_for_approval", arguments="{invalid_json}"
+            ),
         )
+
         tools_schema = ProcessRequestSchema(
             user_prompt="test user_prompt", llm_tool_schema=None, system_message="test system_message"
         )
@@ -276,20 +313,37 @@ class TestAgent(unittest.TestCase):
 
     @patch("src.agent.agent.Agent._timed_completion")
     def test_send_draft_for_approval_rejects_empty_draft(self, mock_timed_completion):
-        mock_final_response = SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content="",
-                        tool_calls=[
-                            SimpleNamespace(
-                                id="01",
-                                function=SimpleNamespace(name="send_draft_for_approval", arguments='{"draft": ""}'),
-                            )
-                        ],
-                    )
-                )
-            ]
+        """Append a draft-required tool message and skip the handler when the draft is empty."""
+        mock_final_response = self._make_response(
+            content="",
+            tool_calls=self._make_tool_call(
+                tool_call_id="01", name="send_draft_for_approval", arguments='{"draft": ""}'
+            ),
+        )
+
+        mock_timed_completion.return_value = mock_final_response
+
+        tool_schema = ProcessRequestSchema(
+            user_prompt="test prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        self.agent.process_request(tool_schema, max_iterations=1)
+
+        last_call = mock_timed_completion.call_args
+        messages = last_call.kwargs["messages"]
+        tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
+
+        assert "Error: send_draft_for_approval requires a draft object." in tool_message["content"]
+        self.mock_draft_approval_handler.send_draft_for_approval.assert_not_called()
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_send_draft_for_approval_rejects_missing_draft_arg(self, mock_timed_completion):
+        """Append a draft-required tool message and skip the handler when the draft argument is missing."""
+        mock_final_response = self._make_response(
+            content="",
+            tool_calls=self._make_tool_call(
+                tool_call_id="01", name="send_draft_for_approval", arguments='{"not_draft": ""}'
+            ),
         )
 
         mock_timed_completion.return_value = mock_final_response
@@ -309,20 +363,9 @@ class TestAgent(unittest.TestCase):
 
     @patch("src.agent.agent.Agent._timed_completion")
     def test_tool_arg_typeerror_converts_into_error_response(self, mock_timed_completion):
-        mock_final_response = SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content="",
-                        tool_calls=[
-                            SimpleNamespace(
-                                id="01",
-                                function=SimpleNamespace(name="create_draft", arguments="{}"),
-                            )
-                        ],
-                    )
-                )
-            ]
+        """Append an argument-mismatch tool message when the tool raises TypeError."""
+        mock_final_response = self._make_response(
+            content="", tool_calls=self._make_tool_call(tool_call_id="01", name="create_draft")
         )
 
         mock_timed_completion.return_value = mock_final_response
@@ -343,26 +386,16 @@ class TestAgent(unittest.TestCase):
 
     @patch("src.agent.agent.Agent._timed_completion")
     def test_valid_tool_call_dispatches_decoded_args(self, mock_timed_completion):
-        mock_final_response = SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content="",
-                        tool_calls=[
-                            SimpleNamespace(
-                                id="01",
-                                function=SimpleNamespace(
-                                    name="create_draft",
-                                    arguments=(
-                                        '{"sender": "test", "recipient": "test", "subject": "test", "message": "test"}'
-                                    ),
-                                ),
-                            )
-                        ],
-                    )
-                )
-            ]
+        """Call the tool with JSON-decoded keyword arguments and append its result as the tool message."""
+        mock_final_response = self._make_response(
+            content="",
+            tool_calls=self._make_tool_call(
+                tool_call_id="01",
+                name="create_draft",
+                arguments='{"sender": "test", "recipient": "test", "subject": "test", "message": "test"}',
+            ),
         )
+
         mock_timed_completion.return_value = mock_final_response
         self.mock_gmail_writer.create_draft.return_value = "<draft>"
 
@@ -384,6 +417,7 @@ class TestAgent(unittest.TestCase):
 
     @patch("src.agent.agent.Agent._timed_completion")
     def test_multi_tool_call_preserves_message_history(self, mock_timed_completion):
+        """Keep every tool message, in order, across multiple tool-calling iterations."""
         mock_timed_completion.side_effect = [
             self._make_response("", self._make_tool_call(tool_call_id="01", name="read_emails")),
             self._make_response("", self._make_tool_call(tool_call_id="02", name="create_draft")),
@@ -412,19 +446,39 @@ class TestAgent(unittest.TestCase):
         assert mock_timed_completion.call_count == 3
         assert result == "Done"
 
-    @staticmethod
-    def _make_tool_call(tool_call_id, name, arguments="{}"):
-        return [SimpleNamespace(id=tool_call_id, function=SimpleNamespace(name=name, arguments=arguments))]
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_send_draft_for_approval_appends_result_as_tool_message(self, mock_timed_completion):
+        """Call the approval handler with the decoded draft arguments and append its result as the tool message."""
+        draft_args = {
+            "draft": {"sender": "test", "recipient": "test", "subject": "test", "message": "test"},
+            "slack_user_id": "U01",
+        }
 
-    @staticmethod
-    def _make_response(content, tool_calls):
-        return SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content=content,
-                        tool_calls=tool_calls,
-                    )
-                )
-            ]
+        mock_final_response = self._make_response(
+            content="",
+            tool_calls=self._make_tool_call(
+                tool_call_id="01",
+                name="send_draft_for_approval",
+                arguments=json.dumps(draft_args),
+            ),
         )
+        mock_timed_completion.return_value = mock_final_response
+        self.mock_draft_approval_handler.send_draft_for_approval.return_value = "<approval>"
+
+        tool_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt",
+            llm_tool_schema=self.send_draft_for_approval_schema,
+            system_message="test system_message",
+        )
+
+        self.agent.process_request(schema=tool_schema, max_iterations=1)
+
+        last_call = mock_timed_completion.call_args
+        messages = last_call.kwargs["messages"]
+        tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
+
+        assert tool_message["tool_call_id"] == "01"
+        assert tool_message["name"] == "send_draft_for_approval"
+        assert tool_message["content"] == "<approval>"
+
+        self.mock_draft_approval_handler.send_draft_for_approval.assert_called_once_with(**draft_args)
