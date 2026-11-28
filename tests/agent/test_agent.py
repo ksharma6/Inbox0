@@ -1,3 +1,4 @@
+import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -9,6 +10,7 @@ from src.gmail.gmail_reader import GmailReader
 from src.gmail.gmail_writer import GmailWriter
 from src.models.agent_schemas import AgentSchema, ProcessRequestSchema
 from src.models.gmail import GmailReaderToolFunction
+from src.models.slack import SlackToolFunction
 from src.slack_handlers.draft_approval_handler import DraftApprovalHandler
 from tenacity import wait_none
 
@@ -39,6 +41,7 @@ class TestAgent(unittest.TestCase):
         )
 
         self.read_emails_schema = GmailReaderToolFunction.generate_read_emails_schema()
+        self.send_draft_for_approval_schema = SlackToolFunction.generate_send_draft_for_approval_schema()
 
         with (
             patch("src.agent.agent.OpenAI") as mock_openai,
@@ -334,6 +337,31 @@ class TestAgent(unittest.TestCase):
         self.mock_draft_approval_handler.send_draft_for_approval.assert_not_called()
 
     @patch("src.agent.agent.Agent._timed_completion")
+    def test_send_draft_for_approval_rejects_missing_draft_arg(self, mock_timed_completion):
+        """Append a draft-required tool message and skip the handler when the draft argument is missing."""
+        mock_final_response = self._make_response(
+            content="",
+            tool_calls=self._make_tool_call(
+                tool_call_id="01", name="send_draft_for_approval", arguments='{"not_draft": ""}'
+            ),
+        )
+
+        mock_timed_completion.return_value = mock_final_response
+
+        tool_schema = ProcessRequestSchema(
+            user_prompt="test prompt", llm_tool_schema=None, system_message="test system_message"
+        )
+
+        self.agent.process_request(tool_schema, max_iterations=1)
+
+        last_call = mock_timed_completion.call_args
+        messages = last_call.kwargs["messages"]
+        tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
+
+        assert "Error: send_draft_for_approval requires a draft object." in tool_message["content"]
+        self.mock_draft_approval_handler.send_draft_for_approval.assert_not_called()
+
+    @patch("src.agent.agent.Agent._timed_completion")
     def test_tool_arg_typeerror_converts_into_error_response(self, mock_timed_completion):
         """Append an argument-mismatch tool message when the tool raises TypeError."""
         mock_final_response = self._make_response(
@@ -417,3 +445,40 @@ class TestAgent(unittest.TestCase):
 
         assert mock_timed_completion.call_count == 3
         assert result == "Done"
+
+    @patch("src.agent.agent.Agent._timed_completion")
+    def test_send_draft_for_approval_appends_result_as_tool_message(self, mock_timed_completion):
+        """Call the approval handler with the decoded draft arguments and append its result as the tool message."""
+        draft_args = {
+            "draft": {"sender": "test", "recipient": "test", "subject": "test", "message": "test"},
+            "slack_user_id": "U01",
+        }
+
+        mock_final_response = self._make_response(
+            content="",
+            tool_calls=self._make_tool_call(
+                tool_call_id="01",
+                name="send_draft_for_approval",
+                arguments=json.dumps(draft_args),
+            ),
+        )
+        mock_timed_completion.return_value = mock_final_response
+        self.mock_draft_approval_handler.send_draft_for_approval.return_value = "<approval>"
+
+        tool_schema = ProcessRequestSchema(
+            user_prompt="test user_prompt",
+            llm_tool_schema=self.send_draft_for_approval_schema,
+            system_message="test system_message",
+        )
+
+        self.agent.process_request(schema=tool_schema, max_iterations=1)
+
+        last_call = mock_timed_completion.call_args
+        messages = last_call.kwargs["messages"]
+        tool_message = next(m for m in messages if isinstance(m, dict) and m.get("role") == "tool")
+
+        assert tool_message["tool_call_id"] == "01"
+        assert tool_message["name"] == "send_draft_for_approval"
+        assert tool_message["content"] == "<approval>"
+
+        self.mock_draft_approval_handler.send_draft_for_approval.assert_called_once_with(**draft_args)
